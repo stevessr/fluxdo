@@ -3,7 +3,6 @@ import 'package:material_ui/material_ui.dart';
 import 'styled_emoji_image.dart';
 import '../../services/emoji_handler.dart';
 import '../../services/discourse_cache_manager.dart';
-import '../../utils/emoji_shortcodes.dart';
 
 /// 轻量级 Emoji 文本组件
 ///
@@ -16,6 +15,7 @@ class EmojiText extends StatelessWidget {
   final TextOverflow? overflow;
   final TextAlign? textAlign;
   final bool? softWrap;
+  final bool useRenderStyle;
 
   /// 短代码识别规则,见 [EmojiHandler.shortcodeMatches];null 跟随站点设置。
   final bool? inline;
@@ -29,6 +29,7 @@ class EmojiText extends StatelessWidget {
     this.textAlign,
     this.softWrap,
     this.inline,
+    this.useRenderStyle = false,
   });
 
   @override
@@ -58,7 +59,13 @@ class EmojiText extends StatelessWidget {
   }
 
   List<InlineSpan> _buildSpans(BuildContext context) {
-    return buildEmojiSpans(context, text, style, inline: inline);
+    return buildEmojiSpans(
+      context,
+      text,
+      style,
+      inline: inline,
+      useRenderStyle: useRenderStyle,
+    );
   }
 
   /// 输入框里表情图之后的等长补位字符样式（字符数与短代码对齐，光标与
@@ -81,6 +88,7 @@ class EmojiText extends StatelessWidget {
     TextStyle? style, {
     bool preserveSourceLength = false,
     bool? inline,
+    bool useRenderStyle = false,
   }) {
     if (!text.contains(':')) {
       return [TextSpan(text: text)];
@@ -97,7 +105,7 @@ class EmojiText extends StatelessWidget {
 
       final emojiName = match.group(1)!;
       // 添加 emoji 图片
-      spans.add(_buildEmojiWidgetSpan(context, emojiName, style));
+      spans.add(_buildEmojiWidgetSpan(context, emojiName, style, useRenderStyle));
       if (preserveSourceLength && match.end - match.start > 1) {
         spans.add(
           TextSpan(
@@ -126,6 +134,7 @@ class EmojiText extends StatelessWidget {
     BuildContext context,
     String emojiName,
     TextStyle? style,
+    bool useRenderStyle,
   ) {
     // 获取当前文字大小，emoji 稍大于文字
     final fontSize =
@@ -139,6 +148,7 @@ class EmojiText extends StatelessWidget {
         child: RepaintBoundary(
           child: StyledEmojiImage(
             name: emojiName,
+            useRenderStyle: useRenderStyle,
             width: emojiSize,
             height: emojiSize,
             cacheWidth: (emojiSize * MediaQuery.devicePixelRatioOf(context)).round(),

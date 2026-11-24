@@ -55,7 +55,72 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       // 在线状态获取失败不影响主流程
     }
 
+    if (!ref.mounted) return state.copyWith(onlineUserIds: onlineUserIds);
+    _syncActivitySubscriptions(state);
+    ref.onDispose(() {
+      for (final entry in _activityCallbacks.entries) {
+        _activityBus?.unsubscribe(entry.key, entry.value);
+      }
+      _activityCallbacks.clear();
+    });
     return state.copyWith(onlineUserIds: onlineUserIds);
+  }
+
+  final _activityCallbacks = <String, MessageBusCallback>{};
+  MessageBusService? _activityBus;
+
+  void _syncActivitySubscriptions(ChatChannelsState channels) {
+    final bus = ref.read(messageBusServiceProvider);
+    _activityBus = bus;
+    final desired = [
+      ...channels.publicChannels,
+      ...channels.directMessageChannels,
+    ].map((channel) => '/chat/${channel.id}/new-messages').toSet();
+    for (final key in _activityCallbacks.keys.toList()) {
+      if (!desired.contains(key)) {
+        bus.unsubscribe(key, _activityCallbacks.remove(key)!);
+      }
+    }
+    for (final key in desired) {
+      if (_activityCallbacks.containsKey(key)) continue;
+      void onActivity(MessageBusMessage event) {
+        final raw = event.data;
+        if (raw is! Map || raw['type'] != 'channel' || raw['message'] is! Map) {
+          return;
+        }
+        final id = (raw['channel_id'] as num?)?.toInt();
+        final current = state.value;
+        if (id == null || current == null) return;
+        try {
+          final json = Map<String, dynamic>.from(raw['message'] as Map);
+          if (DateTime.tryParse(json['created_at']?.toString() ?? '') == null) {
+            return;
+          }
+          final incoming = ChatMessage.fromJson(json);
+          if (incoming.id <= 0) return;
+          state = AsyncData(
+            current.mapChannel(id, (channel) {
+              final previous = channel.lastMessageSentAt;
+              if (previous != null &&
+                  (incoming.createdAt.isBefore(previous) ||
+                      (incoming.createdAt.isAtSameMomentAs(previous) &&
+                          incoming.id <= (channel.lastMessage?.id ?? 0)))) {
+                return channel;
+              }
+              return channel.copyWith(
+                lastMessage: incoming,
+                lastMessageSentAt: incoming.createdAt,
+              );
+            }),
+          );
+        } catch (_) {
+          // 不完整的 MessageBus 消息不覆盖有效摘要。
+        }
+      }
+
+      _activityCallbacks[key] = onActivity;
+      bus.subscribe(key, onActivity);
+    }
   }
 
   /// 刷新频道列表
@@ -98,6 +163,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       }
     } catch (_) {}
 
+    if (ref.mounted) _syncActivitySubscriptions(channelsState);
     return channelsState.copyWith(onlineUserIds: onlineUserIds);
   }
 
@@ -1110,6 +1176,8 @@ final chatChannelThreadsProvider = FutureProvider.autoDispose
           if (thread.id > 0) threads.add(thread);
         } catch (_) {}
       }
+      threads.sort(ChatThread.compareRecentActivity);
+      _watchThreadActivity(ref, [channelId]);
       return threads;
     });
 
@@ -1151,13 +1219,60 @@ List<ChatMessage> _parseChatMessageList(Map<String, dynamic> raw) {
   return parsed;
 }
 
+/// Discourse 在 /chat/:id/new-messages 发布 thread 活动。
+/// 合并短时间内的多条回复，避免逐条重拉分页列表。
+void _watchThreadActivity(
+  Ref ref,
+  Iterable<int> channelIds, {
+  Set<int>? threadIds,
+}) {
+  if (!ref.mounted) return;
+  final bus = ref.read(messageBusServiceProvider);
+  Timer? timer;
+  void onMessage(MessageBusMessage event) {
+    final data = event.data;
+    if (data is! Map || data['type'] != 'thread') return;
+    final id = (data['thread_id'] as num?)?.toInt();
+    if (threadIds != null && !threadIds.contains(id)) return;
+    timer ??= Timer(const Duration(milliseconds: 750), () {
+      timer = null;
+      ref.invalidateSelf();
+    });
+  }
+
+  final channels = channelIds
+      .toSet()
+      .map((id) => '/chat/$id/new-messages')
+      .toList();
+  for (final channel in channels) {
+    bus.subscribe(channel, onMessage);
+  }
+  ref.onDispose(() {
+    timer?.cancel();
+    for (final channel in channels) {
+      bus.unsubscribe(channel, onMessage);
+    }
+  });
+}
+
 /// 所有频道消息串列表（全局消息串 Tab 使用）
 ///
 /// 遍历所有启用了消息串的频道（兜底取前 15 个活跃频道），
 /// 获取每个频道的消息串列表，按最后回复时间排序。
 final chatAllThreadsProvider =
     FutureProvider.autoDispose<List<(ChatThread, ChatChannel)>>((ref) async {
-      final channelsState = ref.watch(chatChannelsProvider).value;
+      // 不因未读角标或频道摘要变化而反复重拉全部消息串。
+      ref.watch(
+        chatChannelsProvider.select((value) {
+          final state = value.value;
+          if (state == null) return null;
+          return [
+            ...state.publicChannels,
+            ...state.directMessageChannels,
+          ].map((c) => '${c.id}:${c.threadingEnabled}').join(',');
+        }),
+      );
+      final channelsState = ref.read(chatChannelsProvider).value;
       if (channelsState == null) return const [];
 
       final allChannels = [
@@ -1172,17 +1287,13 @@ final chatAllThreadsProvider =
       List<(ChatThread, ChatChannel)> sortThreads(
         List<(ChatThread, ChatChannel)> items,
       ) {
-        items.sort((a, b) {
-          final aTime =
-              a.$1.preview?.lastReplyCreatedAt ??
-              a.$1.originalMessage?.createdAt ??
-              DateTime(2000);
-          final bTime =
-              b.$1.preview?.lastReplyCreatedAt ??
-              b.$1.originalMessage?.createdAt ??
-              DateTime(2000);
-          return bTime.compareTo(aTime);
-        });
+        items.sort((a, b) => ChatThread.compareRecentActivity(a.$1, b.$1));
+        final ids = items.map((item) => item.$1.id).toSet();
+        _watchThreadActivity(
+          ref,
+          items.map((item) => item.$2.id),
+          threadIds: ids,
+        );
         return items;
       }
 

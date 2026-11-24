@@ -86,7 +86,9 @@ void main() {
         final leaveLabel = detail ? '退出' : '离开';
         final leaveButton = find.ancestor(
           of: find.text(leaveLabel),
-          matching: find.byWidgetPredicate((widget) => widget is OutlinedButton),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is OutlinedButton,
+          ),
         );
         expect(leaveButton, findsOneWidget);
         expect(tester.takeException(), isNull);

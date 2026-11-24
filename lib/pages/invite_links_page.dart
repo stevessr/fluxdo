@@ -66,7 +66,8 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _restrictionController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _customMessageController = TextEditingController();
+  final TextEditingController _customMessageController =
+      TextEditingController();
   final TextEditingController _maxRedemptionsController = TextEditingController(
     text: '1',
   );
@@ -317,14 +318,16 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       final expiresAt = _showAdvancedOptions
           ? _expiresAt
           : DateTime.now().add(const Duration(days: 1));
-      final result = await ref.read(discourseServiceProvider).createInviteLink(
-        maxRedemptionsAllowed: draft.maxRedemptionsAllowed,
-        expiresAt: expiresAt,
-        description: draft.description,
-        email: draft.email,
-        domain: draft.domain,
-        customMessage: draft.customMessage,
-      );
+      final result = await ref
+          .read(discourseServiceProvider)
+          .createInviteLink(
+            maxRedemptionsAllowed: draft.maxRedemptionsAllowed,
+            expiresAt: expiresAt,
+            description: draft.description,
+            email: draft.email,
+            domain: draft.domain,
+            customMessage: draft.customMessage,
+          );
       if (!mounted ||
           ref.read(currentUserProvider).value?.username != user.username) {
         return;
@@ -1043,9 +1046,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                 key: const Key('invite-description'),
                 controller: _descriptionController,
                 maxLength: 100,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
               ),
               const SizedBox(height: 16),
               Text(context.l10n.invite_expiryTime, style: labelStyle),
@@ -1054,9 +1055,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                 key: const Key('invite-expiry'),
                 initialValue: _expiryPreset,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: _InviteExpiryPreset.values
                     .map(
                       (preset) => DropdownMenuItem(
@@ -1099,9 +1098,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       key: const Key('invite-mode-toggle'),
       onPressed: _isSubmitting
           ? null
-          : () => setState(
-              () => _showAdvancedOptions = !_showAdvancedOptions,
-            ),
+          : () => setState(() => _showAdvancedOptions = !_showAdvancedOptions),
       icon: const Icon(Icons.settings_outlined),
       label: Text(
         _showAdvancedOptions ? strings.simpleMode : strings.advancedMode,
@@ -1351,103 +1348,105 @@ class _InviteFormStrings {
   });
 
   const _InviteFormStrings.zh()
-      : this(
-          inviteMethod: '邀请方式',
-          shareLink: '可分享链接',
-          email: '电子邮件',
-          sendTo: '发送至',
-          sendToHelp: '我们将向此电子邮件地址发送邀请链接。',
-          domain: '限制为域名（可选）',
-          domainHelp: '只有拥有此域名下电子邮箱的用户才能接受此链接。',
-          customMessage: '自定义消息（可选）',
-          customMessageHelp: '包含在邀请电子邮件中。',
-          customMessageHint: '在您的邀请中添加个人备注',
-          descriptionHelp: '可以帮助您识别此邀请的备注。',
-          copyLink: '复制链接',
-          send: '发送',
-          cancel: '取消',
-          advancedMode: '高级模式',
-          simpleMode: '简单模式',
-          invalidEmail: '请输入有效的电子邮件地址',
-          invalidDomain: '请输入有效的域名，如 example.com',
-          invalidRedemptions: '最大使用次数必须为正整数',
-          emailSent: '邀请邮件已发送',
-        );
+    : this(
+        inviteMethod: '邀请方式',
+        shareLink: '可分享链接',
+        email: '电子邮件',
+        sendTo: '发送至',
+        sendToHelp: '我们将向此电子邮件地址发送邀请链接。',
+        domain: '限制为域名（可选）',
+        domainHelp: '只有拥有此域名下电子邮箱的用户才能接受此链接。',
+        customMessage: '自定义消息（可选）',
+        customMessageHelp: '包含在邀请电子邮件中。',
+        customMessageHint: '在您的邀请中添加个人备注',
+        descriptionHelp: '可以帮助您识别此邀请的备注。',
+        copyLink: '复制链接',
+        send: '发送',
+        cancel: '取消',
+        advancedMode: '高级模式',
+        simpleMode: '简单模式',
+        invalidEmail: '请输入有效的电子邮件地址',
+        invalidDomain: '请输入有效的域名，如 example.com',
+        invalidRedemptions: '最大使用次数必须为正整数',
+        emailSent: '邀请邮件已发送',
+      );
 
   const _InviteFormStrings.zhHk()
-      : this(
-          inviteMethod: '邀請方式',
-          shareLink: '可分享連結',
-          email: '電子郵件',
-          sendTo: '傳送至',
-          sendToHelp: '我們將向此電子郵件地址傳送邀請連結。',
-          domain: '限制為網域（可選）',
-          domainHelp: '只有擁有此網域下電郵地址的用戶才能接受此連結。',
-          customMessage: '自訂訊息（可選）',
-          customMessageHelp: '包含在邀請電郵中。',
-          customMessageHint: '在您的邀請中加入個人備註',
-          descriptionHelp: '可以幫助您識別此邀請的備註。',
-          copyLink: '複製連結',
-          send: '傳送',
-          cancel: '取消',
-          advancedMode: '進階模式',
-          simpleMode: '簡單模式',
-          invalidEmail: '請輸入有效的電子郵件地址',
-          invalidDomain: '請輸入有效的網域，例如 example.com',
-          invalidRedemptions: '最多使用次數必須為正整數',
-          emailSent: '邀請電郵已傳送',
-        );
+    : this(
+        inviteMethod: '邀請方式',
+        shareLink: '可分享連結',
+        email: '電子郵件',
+        sendTo: '傳送至',
+        sendToHelp: '我們將向此電子郵件地址傳送邀請連結。',
+        domain: '限制為網域（可選）',
+        domainHelp: '只有擁有此網域下電郵地址的用戶才能接受此連結。',
+        customMessage: '自訂訊息（可選）',
+        customMessageHelp: '包含在邀請電郵中。',
+        customMessageHint: '在您的邀請中加入個人備註',
+        descriptionHelp: '可以幫助您識別此邀請的備註。',
+        copyLink: '複製連結',
+        send: '傳送',
+        cancel: '取消',
+        advancedMode: '進階模式',
+        simpleMode: '簡單模式',
+        invalidEmail: '請輸入有效的電子郵件地址',
+        invalidDomain: '請輸入有效的網域，例如 example.com',
+        invalidRedemptions: '最多使用次數必須為正整數',
+        emailSent: '邀請電郵已傳送',
+      );
 
   const _InviteFormStrings.zhTw()
-      : this(
-          inviteMethod: '邀請方式',
-          shareLink: '可分享連結',
-          email: '電子郵件',
-          sendTo: '寄送至',
-          sendToHelp: '我們將向此電子郵件地址寄送邀請連結。',
-          domain: '限制為網域（選填）',
-          domainHelp: '只有擁有此網域下電子郵件地址的使用者才能接受此連結。',
-          customMessage: '自訂訊息（選填）',
-          customMessageHelp: '包含在邀請電子郵件中。',
-          customMessageHint: '在您的邀請中加入個人備註',
-          descriptionHelp: '可以幫助您辨識此邀請的備註。',
-          copyLink: '複製連結',
-          send: '寄送',
-          cancel: '取消',
-          advancedMode: '進階模式',
-          simpleMode: '簡單模式',
-          invalidEmail: '請輸入有效的電子郵件地址',
-          invalidDomain: '請輸入有效的網域，例如 example.com',
-          invalidRedemptions: '最大使用次數必須為正整數',
-          emailSent: '邀請電子郵件已寄送',
-        );
+    : this(
+        inviteMethod: '邀請方式',
+        shareLink: '可分享連結',
+        email: '電子郵件',
+        sendTo: '寄送至',
+        sendToHelp: '我們將向此電子郵件地址寄送邀請連結。',
+        domain: '限制為網域（選填）',
+        domainHelp: '只有擁有此網域下電子郵件地址的使用者才能接受此連結。',
+        customMessage: '自訂訊息（選填）',
+        customMessageHelp: '包含在邀請電子郵件中。',
+        customMessageHint: '在您的邀請中加入個人備註',
+        descriptionHelp: '可以幫助您辨識此邀請的備註。',
+        copyLink: '複製連結',
+        send: '寄送',
+        cancel: '取消',
+        advancedMode: '進階模式',
+        simpleMode: '簡單模式',
+        invalidEmail: '請輸入有效的電子郵件地址',
+        invalidDomain: '請輸入有效的網域，例如 example.com',
+        invalidRedemptions: '最大使用次數必須為正整數',
+        emailSent: '邀請電子郵件已寄送',
+      );
 
   const _InviteFormStrings.en()
-      : this(
-          inviteMethod: 'Invitation method',
-          shareLink: 'Shareable link',
-          email: 'Email',
-          sendTo: 'Send to',
-          sendToHelp: 'We will send an invitation link to this email address.',
-          domain: 'Restrict to domain (optional)',
-          domainHelp: 'Only people with an email address on this domain can use this link.',
-          customMessage: 'Custom message (optional)',
-          customMessageHelp: 'Included in the invitation email.',
-          customMessageHint: 'Add a personal note to your invitation',
-          descriptionHelp: 'A note to help you identify this invitation.',
-          copyLink: 'Copy link',
-          send: 'Send',
-          cancel: 'Cancel',
-          advancedMode: 'Advanced mode',
-          simpleMode: 'Simple mode',
-          invalidEmail: 'Enter a valid email address',
-          invalidDomain: 'Enter a valid domain, e.g. example.com',
-          invalidRedemptions: 'Maximum uses must be a positive integer',
-          emailSent: 'Invitation email sent',
-        );
+    : this(
+        inviteMethod: 'Invitation method',
+        shareLink: 'Shareable link',
+        email: 'Email',
+        sendTo: 'Send to',
+        sendToHelp: 'We will send an invitation link to this email address.',
+        domain: 'Restrict to domain (optional)',
+        domainHelp: 'Only people with an email address on this domain can use this link.',
+        customMessage: 'Custom message (optional)',
+        customMessageHelp: 'Included in the invitation email.',
+        customMessageHint: 'Add a personal note to your invitation',
+        descriptionHelp: 'A note to help you identify this invitation.',
+        copyLink: 'Copy link',
+        send: 'Send',
+        cancel: 'Cancel',
+        advancedMode: 'Advanced mode',
+        simpleMode: 'Simple mode',
+        invalidEmail: 'Enter a valid email address',
+        invalidDomain: 'Enter a valid domain, e.g. example.com',
+        invalidRedemptions: 'Maximum uses must be a positive integer',
+        emailSent: 'Invitation email sent',
+      );
 
   static _InviteFormStrings of(BuildContext context) {
-    final locale = Localizations.localeOf(context).toLanguageTag().toLowerCase();
+    final locale = Localizations.localeOf(context)
+        .toLanguageTag()
+        .toLowerCase();
     if (locale.startsWith('zh-hk')) return const _InviteFormStrings.zhHk();
     if (locale.startsWith('zh-tw')) return const _InviteFormStrings.zhTw();
     if (locale.startsWith('zh')) return const _InviteFormStrings.zh();

@@ -204,9 +204,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   }
 
   Future<void> _openGroup(DiscourseGroup group) async {
-    await Navigator.of(
-      context,
-    ).push(
+    await Navigator.of(context).push(
       InteractionPageRoute(builder: (_) => GroupPage(groupName: group.name)),
     );
     if (mounted) _load(reset: true);
@@ -347,14 +345,26 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                   initialValue: _type,
                   onSelected: _changeType,
                   itemBuilder: (_) => [
-                    for (final type in const ['', 'my', 'owner', 'public', 'close'])
+                    for (final type in const [
+                      '',
+                      'my',
+                      'owner',
+                      'public',
+                      'close',
+                    ])
                       PopupMenuItem<String>(
-                        key: ValueKey('groups-filter-' + (type.isEmpty ? 'all' : type)),
+                        key: ValueKey(
+                          'groups-filter-' + (type.isEmpty ? 'all' : type),
+                        ),
                         value: type,
                         child: Row(
                           children: [
                             if (_type == type) ...[
-                              Icon(Icons.check_rounded, size: 18, color: scheme.primary),
+                              Icon(
+                                Icons.check_rounded,
+                                size: 18,
+                                color: scheme.primary,
+                              ),
                               const SizedBox(width: 8),
                             ],
                             Text(copy.typeLabel(type)),
@@ -375,7 +385,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                       children: [
                         Flexible(
                           child: Text(
-                            _type.isEmpty ? copy.typeHint : copy.typeLabel(_type),
+                            _type.isEmpty
+                                ? copy.typeHint
+                                : copy.typeLabel(_type),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -389,11 +401,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 if (constraints.maxWidth < 570) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      search,
-                      const SizedBox(height: 8),
-                      typePicker,
-                    ],
+                    children: [search, const SizedBox(height: 8), typePicker],
                   );
                 }
                 return Row(
@@ -413,9 +421,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   copy.total(_total),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
             ),
@@ -647,7 +654,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (group.canJoin) {
       return OutlinedButton.icon(
         onPressed: disabled ? null : () => _changeMembership(group, join: true),
-        icon: busy ? waiting : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+        icon: busy
+            ? waiting
+            : const Icon(Icons.person_add_alt_1_rounded, size: 18),
         label: Text(copy.join),
         style: OutlinedButton.styleFrom(
           visualDensity: VisualDensity.compact,
@@ -657,8 +666,12 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     }
     if (group.canLeave) {
       return OutlinedButton.icon(
-        onPressed: disabled ? null : () => _changeMembership(group, join: false),
-        icon: busy ? waiting : const Icon(Icons.person_remove_rounded, size: 18),
+        onPressed: disabled
+            ? null
+            : () => _changeMembership(group, join: false),
+        icon: busy
+            ? waiting
+            : const Icon(Icons.person_remove_rounded, size: 18),
         label: Text(copy.leave),
         style: OutlinedButton.styleFrom(
           visualDensity: VisualDensity.compact,
@@ -693,10 +706,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       children: [
         Icon(Icons.block_rounded, size: 18, color: scheme.onSurfaceVariant),
         const SizedBox(width: 6),
-        Text(
-          copy.closed,
-          style: TextStyle(color: scheme.onSurfaceVariant),
-        ),
+        Text(copy.closed, style: TextStyle(color: scheme.onSurfaceVariant)),
       ],
     );
   }

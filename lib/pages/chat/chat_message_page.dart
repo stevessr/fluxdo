@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/rendering.dart'
     show
         BoxHitTestResult,
@@ -38,6 +39,7 @@ import '../../utils/url_helper.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
+import '../../widgets/chat/chat_thread_preview_card.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
@@ -1478,8 +1480,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 textInputAction: TextInputAction.search,
                 decoration: const InputDecoration(
                   hintText: '搜索此对话中的消息',
-                  border: InputBorder.none,
-                ),
+                ).withoutBorder(),
                 onSubmitted: _runChannelSearch,
               ),
               actions: [
@@ -3816,74 +3817,9 @@ class _ChatThreadIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final preview = thread.preview;
-    final replyCount = preview?.replyCount ?? thread.replyCount;
-    final lastUser = preview?.lastReplyUser;
-    final lastName = lastUser?.name ?? lastUser?.username;
-    final excerpt = preview?.lastReplyExcerpt?.trim();
-    final time = preview?.lastReplyCreatedAt != null
-        ? TimeUtils.formatRelativeTime(preview!.lastReplyCreatedAt!)
-        : null;
-
     return Padding(
       padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
-      child: Material(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.55,
-        ),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.forum_outlined,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$replyCount 条回复${lastName != null ? ' · $lastName' : ''}'
-                        '${time != null ? ' · $time' : ''}',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (excerpt != null && excerpt.isNotEmpty)
-                        Text(
-                          excerpt,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      child: ChatThreadReplyCard(thread: thread, onTap: onTap),
     );
   }
 }
