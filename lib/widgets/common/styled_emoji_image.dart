@@ -84,6 +84,7 @@ class StyledEmojiImage extends ConsumerWidget {
     this.gaplessPlayback = true,
     this.showPlaceholder = false,
     this.errorFallback,
+    this.useRenderStyle = true,
   });
 
   final String name;
@@ -95,12 +96,13 @@ class StyledEmojiImage extends ConsumerWidget {
   final bool gaplessPlayback;
   final bool showPlaceholder;
   final Widget? errorFallback;
+  final bool useRenderStyle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final style = ref.watch(
-      preferencesProvider.select((p) => p.emojiRenderStyle),
-    );
+    final style = useRenderStyle
+        ? ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle))
+        : EmojiRenderStyle.normal;
     return AnimatedBuilder(
       animation: EmojiHandler(),
       builder: (context, _) {

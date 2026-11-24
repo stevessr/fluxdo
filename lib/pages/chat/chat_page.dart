@@ -10,6 +10,7 @@ import '../../providers/theme_provider.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/chat/chat_conversation_tabs.dart';
+import '../../widgets/chat/chat_thread_preview_card.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
@@ -67,10 +68,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   _ChatChannelFilter _channelFilter = _ChatChannelFilter.all;
-  _ChatChannelSort _channelSort = _ChatChannelSort.priority;
+  _ChatChannelSort _channelSort = _ChatChannelSort.recentActivity;
 
   static const _channelFilterPreferenceKey = 'chat_channel_list_filter';
-  static const _channelSortPreferenceKey = 'chat_channel_list_sort';
+  // 旧版本默认 priority；换 key 让既有安装也采用最近活动作为默认。
+  static const _channelSortPreferenceKey = 'chat_channel_list_sort_v2';
 
   @override
   void initState() {
@@ -86,7 +88,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
     _channelSort = _ChatChannelSort.values.firstWhere(
       (value) => value.name == storedSort,
-      orElse: () => _ChatChannelSort.priority,
+      orElse: () => _ChatChannelSort.recentActivity,
     );
   }
 
@@ -1962,102 +1964,14 @@ class _ChatThreadTabView extends ConsumerWidget {
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: threads.length,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+            separatorBuilder: (_, _) => const Divider(height: 1, indent: 16, endIndent: 16),
             itemBuilder: (context, index) {
               final (thread, channel) = threads[index];
               final om = thread.originalMessage;
-              String? avatarUrl;
-              if (om?.user?.avatarTemplate != null) {
-                avatarUrl = UrlHelper.resolveUrlWithCdn(
-                  om!.user!.avatarTemplate!.replaceAll('{size}', '48'),
-                );
-              }
-              final replyCount =
-                  thread.preview?.replyCount ?? thread.replyCount;
-              final lastAt = thread.preview?.lastReplyCreatedAt;
-              final time = lastAt != null
-                  ? TimeUtils.formatRelativeTime(lastAt)
-                  : (om?.createdAt != null
-                        ? TimeUtils.formatRelativeTime(om!.createdAt!)
-                        : null);
-
-              return ListTile(
-                leading: SmartAvatar(
-                  imageUrl: avatarUrl,
-                  radius: 20,
-                  fallbackText: om?.user?.username,
-                ),
-                title: Text(
-                  thread.displayTitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.secondaryContainer
-                              .withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          channel.title ?? '#${channel.id}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSecondaryContainer,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.forum_outlined,
-                        size: 14,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        replyCount > 0 ? '$replyCount 条回复' : '消息串',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                      if (om?.user?.username != null) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            '@${om!.user!.username}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (time != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          time,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
+              return ChatThreadListItem(
+                key: ValueKey(thread.id),
+                thread: thread,
+                channel: channel,
                 onTap: () async {
                   ChatMessage? original;
                   if (om != null) {
@@ -2072,6 +1986,7 @@ class _ChatThreadTabView extends ConsumerWidget {
                     thread: thread,
                     originalMessage: original,
                   );
+                  if (context.mounted) ref.invalidate(chatAllThreadsProvider);
                 },
               );
             },
