@@ -77,6 +77,9 @@ class PreloadedDataService {
   /// 是否已加载数据
   bool get isLoaded => _loaded;
 
+  @visibleForTesting
+  Dio get dioForTesting => _dio;
+
   /// 当前已发布的 bootstrap 是否来自持久化快照。
   ///
   /// 仅用于让动态数据消费方采用 stale-while-revalidate：缓存先负责首屏，
