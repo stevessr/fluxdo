@@ -12,8 +12,10 @@ import '../../../providers/theme_provider.dart';
 import '../../../utils/responsive.dart';
 import '../controllers/topic_position_info.dart';
 import 'topic_bottom_bar.dart';
+import 'topic_bottom_menu_layer.dart';
 import 'topic_filter_controls.dart';
 import '../controllers/topic_reply_session.dart';
+import '../controllers/topic_jump_history.dart';
 
 /// 话题详情页浮层
 /// 包含底部操作栏、收起后的贴底进度线、回顶按钮与底栏手势的首次引导
@@ -39,6 +41,11 @@ class TopicDetailOverlay extends ConsumerStatefulWidget {
   final ValueListenable<String?>? replyDraftListenable;
   final VoidCallback onReplyEntryTap;
   final VoidCallback onScrollToTop;
+  final Widget? returnButton;
+  final TopicJumpHistory? jumpHistory;
+
+  /// 树形视图中的下一条主回复操作，null 表示当前没有下一条。
+  final ValueListenable<VoidCallback?>? nextRootListenable;
 
   /// 目录按钮（窄屏、有目录时由页面提供）与其显隐
   final Widget? tocButton;
@@ -58,6 +65,12 @@ class TopicDetailOverlay extends ConsumerStatefulWidget {
   /// 底栏回复入口胶囊的 key
   final GlobalKey replyEntryKey;
 
+  /// 底栏原地展开宫格菜单会话（null 时沿用旧弹出菜单）
+  final TopicBottomMenuSession? menuSession;
+
+  /// 底栏右侧操作组的 key：宫格菜单从它原地展开
+  final GlobalKey? menuSourceKey;
+
   const TopicDetailOverlay({
     super.key,
     required this.showBottomBarListenable,
@@ -70,6 +83,9 @@ class TopicDetailOverlay extends ConsumerStatefulWidget {
     this.replyDraftListenable,
     required this.onReplyEntryTap,
     required this.onScrollToTop,
+    this.returnButton,
+    this.jumpHistory,
+    this.nextRootListenable,
     this.tocButton,
     this.tocVisibleListenable,
     required this.onOpenTimeline,
@@ -81,6 +97,8 @@ class TopicDetailOverlay extends ConsumerStatefulWidget {
     required this.filter,
     this.replySession,
     required this.replyEntryKey,
+    this.menuSession,
+    this.menuSourceKey,
   });
 
   /// 回顶按钮显隐：随底栏一起出现（往回滑表示想回去），且不在顶部
@@ -148,7 +166,7 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
     if (!mounted ||
         _hintChecked ||
         widget.filter.isNestedMode ||
-        _composing ||
+        _panelActive ||
         widget.totalCount <= 1 ||
         !widget.showBottomBarListenable.value) {
       return;
@@ -195,6 +213,9 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
       filter: widget.filter,
       replyEntryKey: _replyEntryKey,
       replyEntryHiddenListenable: widget.replySession?.presentedNotifier,
+      menuSourceKey: widget.menuSourceKey,
+      onOpenBottomMenu: widget.menuSession?.open,
+      menuPresentedListenable: widget.menuSession?.presentedNotifier,
     );
 
     final stack = Stack(
@@ -239,12 +260,13 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
             child: child!,
           ),
         ),
-        // 悬浮按钮列（目录、回顶）：整列随底栏一起移动；单个按钮出现 /
+        // 悬浮按钮列（目录、下一条主回复、回顶）：整列随底栏一起移动；单个按钮出现 /
         // 消失时高度折叠，其余按钮同步让位，而不是各自跳位
         ListenableBuilder(
           listenable: Listenable.merge([
             widget.showBottomBarListenable,
             ?widget.replySession?.activeNotifier,
+            ?widget.menuSession?.activeNotifier,
           ]),
           child: TopicDetailOverlay.alignWithBar(
             context,
@@ -254,6 +276,19 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (widget.nextRootListenable != null)
+                    ValueListenableBuilder<VoidCallback?>(
+                      valueListenable: widget.nextRootListenable!,
+                      builder: (context, nextRoot, _) => _FloatingButtonSlot(
+                        visible: nextRoot != null,
+                        child: FloatingActionButton.small(
+                          heroTag: null,
+                          onPressed: nextRoot,
+                          tooltip: context.l10n.nested_nextRoot,
+                          child: const Icon(Symbols.skip_next_rounded),
+                        ),
+                      ),
+                    ),
                   if (widget.tocButton != null &&
                       widget.tocVisibleListenable != null)
                     ValueListenableBuilder<bool>(
@@ -301,16 +336,57 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
                 ) -
                 TopicBottomBarMetrics.gap,
             child: IgnorePointer(
-              ignoring: _composing,
+              ignoring: _panelActive,
               child: AnimatedOpacity(
                 duration: _motion,
                 curve: TopicBottomBarMetrics.motionCurve,
-                opacity: _composing ? 0 : 1,
+                opacity: _panelActive ? 0 : 1,
                 child: child,
               ),
             ),
           ),
         ),
+        if (widget.returnButton != null)
+          ListenableBuilder(
+            listenable: Listenable.merge([
+              widget.showBottomBarListenable,
+              ?widget.replySession?.activeNotifier,
+              ?widget.menuSession?.activeNotifier,
+            ]),
+            child: TopicDetailOverlay.alignWithBar(
+              context,
+              Align(
+                alignment: Alignment.bottomLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    right:
+                        TopicDetailOverlay.smallFabSize +
+                        TopicBottomBarMetrics.gap,
+                  ),
+                  child: widget.returnButton,
+                ),
+              ),
+            ),
+            builder: (context, child) => AnimatedPositioned(
+              key: const ValueKey('reading_return_button'),
+              duration: _motion,
+              curve: TopicBottomBarMetrics.motionCurve,
+              left: 0,
+              right: 0,
+              bottom: TopicDetailOverlay.floatingButtonBase(
+                context,
+                widget.showBottomBarListenable.value,
+              ),
+              child: IgnorePointer(
+                ignoring: _panelActive,
+                child: AnimatedOpacity(
+                  opacity: _panelActive ? 0 : 1,
+                  duration: _motion,
+                  child: child,
+                ),
+              ),
+            ),
+          ),
         // 底栏真正可见时才计入一次引导。
         if (!widget.filter.isNestedMode &&
             widget.totalCount > 1 &&
@@ -321,7 +397,9 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
             listenable: Listenable.merge([
               widget.showBottomBarListenable,
               _hintVisible,
+              ?widget.jumpHistory,
               ?widget.replySession?.activeNotifier,
+              ?widget.menuSession?.activeNotifier,
             ]),
             child: TopicDetailOverlay.alignWithBar(
               context,
@@ -330,7 +408,7 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
             builder: (context, child) {
               if (!_hintChecked &&
                   widget.showBottomBarListenable.value &&
-                  !_composing) {
+                  !_panelActive) {
                 WidgetsBinding.instance.addPostFrameCallback(
                   (_) => _maybeShowHint(),
                 );
@@ -338,7 +416,8 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
               final visible =
                   _hintVisible.value &&
                   widget.showBottomBarListenable.value &&
-                  !_composing;
+                  widget.jumpHistory?.target == null &&
+                  !_panelActive;
               return Positioned(
                 key: const ValueKey('bar_gesture_hint'),
                 left: 0,
@@ -377,6 +456,7 @@ class _TopicDetailOverlayState extends ConsumerState<TopicDetailOverlay> {
   }
 
   bool get _composing => widget.replySession?.active ?? false;
+  bool get _panelActive => _composing || (widget.menuSession?.active ?? false);
 
   /// 悬浮形态：卡片宽度跟随帖子列，离底边留出安全区与边距
   Widget _wrapFloating(Widget bar) {
