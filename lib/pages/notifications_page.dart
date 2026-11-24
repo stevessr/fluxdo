@@ -60,7 +60,14 @@ enum _NotificationTab {
     likes => NotificationActionStream.likes,
     edits => NotificationActionStream.edits,
     links => NotificationActionStream.links,
-    all || messages || bookmarks || assigned || chat || reactions || boosts || other => null,
+    all ||
+    messages ||
+    bookmarks ||
+    assigned ||
+    chat ||
+    reactions ||
+    boosts ||
+    other => null,
   };
 
   IconData get icon => switch (this) {
@@ -407,14 +414,17 @@ class _PagedTabState<T> extends State<_PagedTab<T>>
           // 已加载页全部被本地屏蔽时列表不可滚，滚动触发的翻页永远不会
           // 发生；主动补载下一页（coordinator 自带冷却，不会打转）
           final manual = widget.needsManualLoadMore?.call() ?? false;
-          if (visible.isEmpty && notifier.hasMore && !manual &&
+          if (visible.isEmpty &&
+              notifier.hasMore &&
+              !manual &&
               (items.isNotEmpty || widget.onContinue != null)) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _loadMore();
             });
           }
           if (visible.isEmpty &&
-              (!notifier.hasMore || (items.isEmpty && widget.onContinue == null))) {
+              (!notifier.hasMore ||
+                  (items.isEmpty && widget.onContinue == null))) {
             return AppEmptyState(
               icon: const Icon(Symbols.notifications_rounded),
               title: widget.emptyTitle,
@@ -438,8 +448,10 @@ class _PagedTabState<T> extends State<_PagedTab<T>>
                 itemCount: list.count + 1,
                 itemBuilder: (context, index) {
                   if (index == list.count) {
-                    if (widget.onContinue != null && notifier.hasMore &&
-                        !notifier.isLoadingMore && !notifier.isLoadMoreFailed) {
+                    if (widget.onContinue != null &&
+                        notifier.hasMore &&
+                        !notifier.isLoadingMore &&
+                        !notifier.isLoadMoreFailed) {
                       return Center(
                         child: TextButton(
                           onPressed: () {
@@ -501,10 +513,12 @@ class _NotificationStreamTab extends ConsumerWidget {
       onLoadMore: notifier.loadMore,
       onRetry: notifier.retryLoadMore,
       needsManualLoadMore: () => notifier.needsManualLoadMore,
-      onContinue: category == NotificationCategory.all ? null : () async {
-        notifier.allowMoreHistoryScan();
-        await notifier.loadMore();
-      },
+      onContinue: category == NotificationCategory.all
+          ? null
+          : () async {
+              notifier.allowMoreHistoryScan();
+              await notifier.loadMore();
+            },
       skeleton: const NotificationCardListSkeleton(),
       emptyTitle: filter == NotificationReadFilter.unread
           ? context.l10n.notification_emptyUnread

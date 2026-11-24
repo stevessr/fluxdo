@@ -474,13 +474,17 @@ final notificationCategoryHistoryProvider = AsyncNotifierProvider.family
       NotificationListNotifier,
       List<DiscourseNotification>,
       NotificationCategory
-    >((category) => NotificationListNotifier(
-      NotificationReadFilter.all,
-      category: category,
-    ));
+    >(
+      (category) => NotificationListNotifier(
+        NotificationReadFilter.all,
+        category: category,
+      ),
+    );
 
 /// Iterate without reading providers so background events never instantiate tabs.
-Iterable<AsyncNotifierProvider<NotificationListNotifier, List<DiscourseNotification>>>
+Iterable<
+  AsyncNotifierProvider<NotificationListNotifier, List<DiscourseNotification>>
+>
 notificationHistoryProviders() sync* {
   for (final filter in NotificationReadFilter.values) {
     yield notificationListProvider(filter);

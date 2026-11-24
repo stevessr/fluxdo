@@ -17,9 +17,15 @@ void main() {
   test('every known type has one native category; unknown ids survive', () {
     for (final type in NotificationType.values) {
       final notification = notificationOf(type);
-      expect(NotificationCategory.values.where((category) =>
-          category != NotificationCategory.all && category.matches(notification)),
-          hasLength(1), reason: '$type');
+      expect(
+        NotificationCategory.values.where(
+          (category) =>
+              category != NotificationCategory.all &&
+              category.matches(notification),
+        ),
+        hasLength(1),
+        reason: '$type',
+      );
     }
     final unknown = DiscourseNotification.fromJson({
       'id': 5,
