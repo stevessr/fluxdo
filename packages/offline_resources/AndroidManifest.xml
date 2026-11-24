@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.github.stevessr.fluxdo.resources" android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="35"/>
+    <application android:label="Fluxdo Offline Fonts &amp; Emoji" android:allowBackup="false"
+        android:theme="@android:style/Theme.Material.Light.Dialog.Alert">
+        <activity android:name=".PackActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="com.github.lingyan000.fluxdo.action.PLUGIN"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+            <meta-data android:name="com.github.lingyan000.fluxdo.plugin.API_VERSION" android:value="1"/>
+        </activity>
+    </application>
+</manifest>

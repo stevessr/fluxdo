@@ -12,6 +12,9 @@ on:
       - 'lib/services/emoji_handler.dart'
       - 'lib/services/fonts/emoji_font_service.dart'
       - 'test/services/emoji_font_coverage_test.dart'
+      - 'lib/services/fonts/offline_resource_pack.dart'
+      - 'lib/services/fonts/font_download_service.dart'
+      - 'test/services/fonts/offline_resource_pack_test.dart'
       - 'lib/settings/definitions/reading_defs.dart'
       - 'lib/utils/fluxdo_render_callbacks.dart'
       - 'lib/widgets/common/emoji_text.dart'
@@ -45,7 +48,7 @@ jobs:
     with:
       workflow_file: .github/workflows/emoji-style-regression.yml
       patterns: >-
-        ["lib/providers/preferences_provider.dart","lib/services/display_refresh_service.dart","lib/settings/definitions/appearance_defs.dart","lib/settings/definitions/appearance_layout.dart","lib/pages/reading_settings_page.dart","test/services/display_refresh_service_test.dart","lib/services/emoji_handler.dart","lib/services/fonts/emoji_font_service.dart","test/services/emoji_font_coverage_test.dart","lib/settings/definitions/reading_defs.dart","lib/utils/fluxdo_render_callbacks.dart","lib/widgets/common/emoji_text.dart","lib/widgets/common/styled_emoji_image.dart","lib/widgets/content/collapsed_html_content.dart","lib/widgets/markdown_editor/emoji_picker.dart","test/emoji_render_style_test.dart","lib/widgets/common/smart_avatar.dart","lib/widgets/content/discourse_html_content/image_utils.dart","test/services/emoji_handler_late_preload_test.dart","test/widgets/content/image_utils_test.dart",".github/workflows/emoji-style-regression.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+        ["lib/providers/preferences_provider.dart","lib/services/display_refresh_service.dart","lib/settings/definitions/appearance_defs.dart","lib/settings/definitions/appearance_layout.dart","lib/pages/reading_settings_page.dart","test/services/display_refresh_service_test.dart","lib/services/emoji_handler.dart","lib/services/fonts/emoji_font_service.dart","test/services/emoji_font_coverage_test.dart","lib/services/fonts/offline_resource_pack.dart","lib/services/fonts/font_download_service.dart","test/services/fonts/offline_resource_pack_test.dart","lib/settings/definitions/reading_defs.dart","lib/utils/fluxdo_render_callbacks.dart","lib/widgets/common/emoji_text.dart","lib/widgets/common/styled_emoji_image.dart","lib/widgets/content/collapsed_html_content.dart","lib/widgets/markdown_editor/emoji_picker.dart","test/emoji_render_style_test.dart","lib/widgets/common/smart_avatar.dart","lib/widgets/content/discourse_html_content/image_utils.dart","test/services/emoji_handler_late_preload_test.dart","test/widgets/content/image_utils_test.dart",".github/workflows/emoji-style-regression.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
 
   emoji-style:
     needs: scope
@@ -81,6 +84,9 @@ jobs:
             lib/services/emoji_handler.dart \
             lib/services/fonts/emoji_font_service.dart \
             test/services/emoji_font_coverage_test.dart \
+            lib/services/fonts/offline_resource_pack.dart \
+            lib/services/fonts/font_download_service.dart \
+            test/services/fonts/offline_resource_pack_test.dart \
             lib/settings/definitions/reading_defs.dart \
             lib/utils/fluxdo_render_callbacks.dart \
             lib/widgets/common/emoji_text.dart \
@@ -112,6 +118,8 @@ jobs:
           dart tool/flutterw.dart test
           test/emoji_render_style_test.dart
           test/services/emoji_font_coverage_test.dart
+          test/services/fonts/offline_resource_pack_test.dart
+          test/services/fonts/font_download_service_test.dart
           test/services/display_refresh_service_test.dart
           test/services/emoji_handler_late_preload_test.dart
           test/widgets/content/image_utils_test.dart

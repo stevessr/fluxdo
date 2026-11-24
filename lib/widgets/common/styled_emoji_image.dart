@@ -6,6 +6,7 @@ import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
 import '../../services/fonts/emoji_font_service.dart';
+import '../../services/fonts/offline_resource_pack.dart';
 import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import '../../utils/emoji_shortcodes.dart';
 
@@ -160,15 +161,33 @@ class StyledEmojiImage extends StatelessWidget {
             overflow: TextOverflow.clip,
           ),
         );
-        Widget selectedStatic() {
+        Widget onlineStatic() {
           if (staticUrl == null || staticUrl == regularUrl) return normalImage();
           final fallback = pinnedUrl == null
               ? normalImage()
               : _image(context, pinnedUrl, onError: normalImage());
           return _image(context, staticUrl, onError: fallback);
         }
+        final localName = normalizeEmojiShortcodeName(name).toLowerCase();
+        Widget systemGlyph() {
+          final key = EmojiStyleAssets.unicodeFor(name);
+          if (key == null) return errorFallback ?? Text(':$name:');
+          final scalars = key.split('_').map((v) => int.parse(v, radix: 16));
+          return _glyph(context, String.fromCharCodes(scalars));
+        }
+        Widget selectedStatic() {
+          if (custom || !usePostStyle || staticUrl == null) return onlineStatic();
+          return _packImage(context, localName, set,
+              online: onlineStatic, missing: systemGlyph);
+        }
         if (dynamicUrl != null) {
-          return _image(context, dynamicUrl, onError: selectedStatic());
+          final dynamicSet = style == EmojiRenderStyle.animated
+              ? 'noto_animated' : 'noto_3d';
+          return _packImage(context, localName, dynamicSet,
+              online: () => _image(context, dynamicUrl, onError: selectedStatic()),
+              missing: () => _packImage(context, localName,
+                  staticUrl == null ? 'noto' : set,
+                  online: systemGlyph, missing: systemGlyph));
         }
         if (custom || !usePostStyle || style != EmojiRenderStyle.normal) {
           return selectedStatic();
@@ -198,6 +217,32 @@ class StyledEmojiImage extends StatelessWidget {
             final glyph = face?.glyphFor(unicode);
             return glyph == null ? selectedStatic() : _glyph(context, glyph, family: face!.family);
           },
+        );
+      },
+    );
+  }
+
+  Widget _packImage(BuildContext context, String name, String set, {
+    required Widget Function() online,
+    required Widget Function() missing,
+  }) {
+    final path = OfflineResourcePack.emojiPath(name, set);
+    if (path == null || !OfflineResourcePack.supported) return online();
+    return FutureBuilder<PackEmojiAsset>(
+      future: OfflineResourcePack.instance.emoji(path),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return SizedBox(width: width, height: height);
+        }
+        final asset = snapshot.data;
+        if (asset == null || !asset.installed) return online();
+        final bytes = asset.bytes;
+        if (bytes == null) return missing();
+        return Image.memory(
+          bytes, width: width, height: height, fit: fit,
+          gaplessPlayback: gaplessPlayback,
+          cacheWidth: set == 'noto_animated' ? null : cacheWidth,
+          errorBuilder: (_, _, _) => missing(),
         );
       },
     );

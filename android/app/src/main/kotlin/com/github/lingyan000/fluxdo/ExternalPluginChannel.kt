@@ -3,6 +3,8 @@ package com.github.lingyan000.fluxdo
 import android.app.Activity
 import android.net.Uri
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.util.concurrent.Executors
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
@@ -28,11 +30,28 @@ internal class ExternalPluginChannel(
         private const val API_VERSION = "com.github.lingyan000.fluxdo.plugin.API_VERSION"
         private const val INSERT_IMAGE_REQUEST = 0xF1D0
         private const val MAX_GENERATED_IMAGE_BYTES = 12 * 1024 * 1024
+        private const val PACK_PACKAGE = "com.github.stevessr.fluxdo.resources"
+        private val FONT_PATH = Regex("^(fonts/[0-9a-f]{64}|emoji_fonts/[0-9a-f]{40})\\.ttf$")
+        private val EMOJI_PATH = Regex("^emoji/(noto|twemoji|fluentui|openmoji|unicode|noto_3d|noto_animated)/[a-z0-9_+\\-]+(/[1-6])?\\.(png|webp)$")
     }
+
+    private val packExecutor = Executors.newFixedThreadPool(2)
 
     private val channel = MethodChannel(messenger, CHANNEL).also { channel ->
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
+                "copyPackFont", "readPackEmoji" -> {
+                    val path = call.argument<String>("path").orEmpty()
+                    val font = call.method == "copyPackFont"
+                    if (!(if (font) FONT_PATH else EMOJI_PATH).matches(path)) {
+                        result.error("INVALID_ASSET", "Invalid resource pack path", null)
+                    } else {
+                        packExecutor.execute {
+                            val value = readPackAsset(path, font)
+                            activity.runOnUiThread { result.success(value) }
+                        }
+                    }
+                }
                 "listPlugins" -> {
                     try {
                         result.success(discover().map { (info, component) ->
@@ -61,6 +80,55 @@ internal class ExternalPluginChannel(
 
     fun dispose() {
         channel.setMethodCallHandler(null)
+        packExecutor.shutdown()
+    }
+
+    // Read only the designated package's assets. Never load its code or
+    // accept a filesystem path from a third-party application.
+    private fun readPackAsset(path: String, font: Boolean): Map<String, Any?> {
+        val pack = try {
+            activity.createPackageContext(PACK_PACKAGE, 0)
+        } catch (_: PackageManager.NameNotFoundException) {
+            return mapOf("installed" to false)
+        } catch (_: Exception) {
+            return mapOf("installed" to false)
+        }
+        var temporary: File? = null
+        return try {
+            pack.assets.open(path).use { input ->
+                val limit = if (font) 80 * 1024 * 1024 else 2 * 1024 * 1024
+                if (font) {
+                    val target = File.createTempFile("pack-font-", ".ttf", activity.cacheDir)
+                    temporary = target
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(32768)
+                        var total = 0
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            require(total <= limit)
+                            output.write(buffer, 0, count)
+                        }
+                        require(total > 0)
+                    }
+                    mapOf("installed" to true, "path" to target.absolutePath)
+                } else {
+                    val buffer = ByteArray(8192)
+                    val output = ByteArrayOutputStream()
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        require(output.size() + count <= limit)
+                        output.write(buffer, 0, count)
+                    }
+                    mapOf("installed" to true, "bytes" to output.toByteArray())
+                }
+            }
+        } catch (_: Exception) {
+            temporary?.delete()
+            mapOf("installed" to true)
+        }
     }
 
     /**
