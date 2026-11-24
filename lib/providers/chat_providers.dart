@@ -72,8 +72,10 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
   void _syncActivitySubscriptions(ChatChannelsState channels) {
     final bus = ref.read(messageBusServiceProvider);
     _activityBus = bus;
-    final desired = [...channels.publicChannels, ...channels.directMessageChannels]
-        .map((channel) => '/chat/${channel.id}/new-messages').toSet();
+    final desired = [
+      ...channels.publicChannels,
+      ...channels.directMessageChannels,
+    ].map((channel) => '/chat/${channel.id}/new-messages').toSet();
     for (final key in _activityCallbacks.keys.toList()) {
       if (!desired.contains(key)) {
         bus.unsubscribe(key, _activityCallbacks.remove(key)!);
@@ -83,27 +85,36 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       if (_activityCallbacks.containsKey(key)) continue;
       void onActivity(MessageBusMessage event) {
         final raw = event.data;
-        if (raw is! Map || raw['type'] != 'channel' || raw['message'] is! Map) return;
+        if (raw is! Map ||
+            raw['type'] != 'channel' ||
+            raw['message'] is! Map) {
+          return;
+        }
         final id = (raw['channel_id'] as num?)?.toInt();
         final current = state.value;
         if (id == null || current == null) return;
         try {
           final json = Map<String, dynamic>.from(raw['message'] as Map);
-          if (DateTime.tryParse(json['created_at']?.toString() ?? '') == null) return;
+          if (DateTime.tryParse(json['created_at']?.toString() ?? '') == null) {
+            return;
+          }
           final incoming = ChatMessage.fromJson(json);
           if (incoming.id <= 0) return;
-          state = AsyncData(current.mapChannel(id, (channel) {
-            final previous = channel.lastMessageSentAt;
-            if (previous != null && (incoming.createdAt.isBefore(previous) ||
-                (incoming.createdAt.isAtSameMomentAs(previous) &&
-                 incoming.id <= (channel.lastMessage?.id ?? 0)))) {
-              return channel;
-            }
-            return channel.copyWith(
-              lastMessage: incoming,
-              lastMessageSentAt: incoming.createdAt,
-            );
-          }));
+          state = AsyncData(
+            current.mapChannel(id, (channel) {
+              final previous = channel.lastMessageSentAt;
+              if (previous != null &&
+                  (incoming.createdAt.isBefore(previous) ||
+                      (incoming.createdAt.isAtSameMomentAs(previous) &&
+                          incoming.id <= (channel.lastMessage?.id ?? 0)))) {
+                return channel;
+              }
+              return channel.copyWith(
+                lastMessage: incoming,
+                lastMessageSentAt: incoming.createdAt,
+              );
+            }),
+          );
         } catch (_) {
           // 不完整的 MessageBus 消息不覆盖有效摘要。
         }
@@ -1211,7 +1222,11 @@ List<ChatMessage> _parseChatMessageList(Map<String, dynamic> raw) {
 
 /// Discourse 在 /chat/:id/new-messages 发布 thread 活动。
 /// 合并短时间内的多条回复，避免逐条重拉分页列表。
-void _watchThreadActivity(Ref ref, Iterable<int> channelIds, {Set<int>? threadIds}) {
+void _watchThreadActivity(
+  Ref ref,
+  Iterable<int> channelIds, {
+  Set<int>? threadIds,
+}) {
   if (!ref.mounted) return;
   final bus = ref.read(messageBusServiceProvider);
   Timer? timer;
@@ -1226,7 +1241,10 @@ void _watchThreadActivity(Ref ref, Iterable<int> channelIds, {Set<int>? threadId
     });
   }
 
-  final channels = channelIds.toSet().map((id) => '/chat/$id/new-messages').toList();
+  final channels = channelIds
+      .toSet()
+      .map((id) => '/chat/$id/new-messages')
+      .toList();
   for (final channel in channels) {
     bus.subscribe(channel, onMessage);
   }
@@ -1245,12 +1263,16 @@ void _watchThreadActivity(Ref ref, Iterable<int> channelIds, {Set<int>? threadId
 final chatAllThreadsProvider =
     FutureProvider.autoDispose<List<(ChatThread, ChatChannel)>>((ref) async {
       // 不因未读角标或频道摘要变化而反复重拉全部消息串。
-      ref.watch(chatChannelsProvider.select((value) {
-        final state = value.value;
-        if (state == null) return null;
-        return [...state.publicChannels, ...state.directMessageChannels]
-            .map((c) => '${c.id}:${c.threadingEnabled}').join(',');
-      }));
+      ref.watch(
+        chatChannelsProvider.select((value) {
+          final state = value.value;
+          if (state == null) return null;
+          return [
+            ...state.publicChannels,
+            ...state.directMessageChannels,
+          ].map((c) => '${c.id}:${c.threadingEnabled}').join(',');
+        }),
+      );
       final channelsState = ref.read(chatChannelsProvider).value;
       if (channelsState == null) return const [];
 
@@ -1268,8 +1290,11 @@ final chatAllThreadsProvider =
       ) {
         items.sort((a, b) => ChatThread.compareRecentActivity(a.$1, b.$1));
         final ids = items.map((item) => item.$1.id).toSet();
-        _watchThreadActivity(ref, items.map((item) => item.$2.id),
-            threadIds: ids);
+        _watchThreadActivity(
+          ref,
+          items.map((item) => item.$2.id),
+          threadIds: ids,
+        );
         return items;
       }
 
