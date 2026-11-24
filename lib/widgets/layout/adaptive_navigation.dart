@@ -237,7 +237,7 @@ class _NavigationRailItem extends StatelessWidget {
     Widget anchoredIcon() => Builder(
       builder: (anchorContext) {
         iconContext = anchorContext;
-        return IconTheme(
+        return IconTheme.merge(
           data: IconThemeData(color: iconColor, size: 24),
           child: icon,
         );
@@ -930,7 +930,7 @@ class _CapsuleNavItem extends StatelessWidget {
     // 选中态用强调色与 pill 淡底同源。
     final iconColor = selected ? scheme.primary : scheme.onSurfaceVariant;
 
-    final icon = IconTheme(
+    final icon = IconTheme.merge(
       data: IconThemeData(color: iconColor, size: _CapsuleMetrics.iconSize),
       child: selected
           ? _ActiveDestinationIcon(dest: dest, defaultIcon: dest.selectedIcon)
