@@ -28,7 +28,7 @@ Map<String, dynamic> _response(
 
 ProviderContainer _container() {
   final container = ProviderContainer();
-  final subscription = container.listen(notificationListProvider, (_, _) {});
+  final subscription = container.listen(notificationListProvider(NotificationReadFilter.all), (_, _) {});
   addTearDown(subscription.close);
   addTearDown(container.dispose);
   return container;
@@ -81,15 +81,15 @@ void main() {
       addTearDown(() => service.dio.interceptors.remove(interceptor));
 
       final container = _container();
-      await container.read(notificationListProvider.future);
-      final notifier = container.read(notificationListProvider.notifier);
+      await container.read(notificationListProvider(NotificationReadFilter.all).future);
+      final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
       await notifier.setCategory(NotificationCategory.mentions);
       expect(notifier.hasMore, isTrue);
-      expect(container.read(notificationListProvider).value!.single.id, 300);
+      expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.single.id, 300);
 
       await notifier.loadMore();
       expect(offsets, [0, 60, 120]);
-      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+      expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.map((n) => n.id), [
         300,
         150,
       ]);
@@ -147,8 +147,8 @@ void main() {
       addTearDown(() => service.dio.interceptors.remove(interceptor));
 
       final container = _container();
-      await container.read(notificationListProvider.future);
-      final notifier = container.read(notificationListProvider.notifier);
+      await container.read(notificationListProvider(NotificationReadFilter.all).future);
+      final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
       await notifier.setCategory(NotificationCategory.mentions);
 
       await notifier.loadMore();
@@ -161,7 +161,7 @@ void main() {
       notifier.allowMoreHistoryScan();
       await notifier.loadMore();
       expect(offsets, [0, 60, 120, 180, 240]);
-      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+      expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.map((n) => n.id), [
         400,
         10,
       ]);
@@ -208,8 +208,8 @@ void main() {
       addTearDown(() => service.dio.interceptors.remove(interceptor));
 
       final container = _container();
-      await container.read(notificationListProvider.future);
-      final notifier = container.read(notificationListProvider.notifier);
+      await container.read(notificationListProvider(NotificationReadFilter.all).future);
+      final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
       await notifier.setCategory(NotificationCategory.mentions);
 
       final oldPage = notifier.loadMore();
@@ -221,7 +221,7 @@ void main() {
       await oldPage;
 
       expect(notifier.category, NotificationCategory.replies);
-      expect(container.read(notificationListProvider).value!.single.id, 2);
+      expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.single.id, 2);
       expect(notifier.historyOffset, 0);
       expect(notifier.hasMore, isTrue);
     },
@@ -259,16 +259,16 @@ void main() {
     addTearDown(() => service.dio.interceptors.remove(interceptor));
 
     final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
+    await container.read(notificationListProvider(NotificationReadFilter.all).future);
+    final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
     await notifier.setCategory(NotificationCategory.replies);
     await notifier.setFilter(NotificationReadFilter.unread);
-    expect(container.read(notificationListProvider).value, isEmpty);
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value, isEmpty);
     expect(notifier.hasMore, isTrue);
 
     await notifier.loadMore();
     expect(historyQueries.last['filter'], 'unread');
-    expect(container.read(notificationListProvider).value!.single.id, 25);
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.single.id, 25);
     expect(notifier.hasMore, isFalse);
   });
   test('mark-all cancels pending unread pagination', () async {
@@ -308,8 +308,8 @@ void main() {
     addTearDown(() => service.dio.interceptors.remove(interceptor));
 
     final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
+    await container.read(notificationListProvider(NotificationReadFilter.all).future);
+    final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
     await notifier.setCategory(NotificationCategory.mentions);
     await notifier.setFilter(NotificationReadFilter.unread);
 
@@ -317,13 +317,13 @@ void main() {
     await requested.future;
     await notifier.markAllAsRead();
 
-    expect(container.read(notificationListProvider).value, isEmpty);
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value, isEmpty);
     delayedHistory.complete(
       _response([_notification(20, NotificationType.mentioned)], total: 60),
     );
     await pending;
 
-    expect(container.read(notificationListProvider).value, isEmpty);
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value, isEmpty);
     expect(notifier.hasMore, isFalse);
     expect(notifier.historyOffset, 0);
   });
@@ -369,8 +369,8 @@ void main() {
     addTearDown(() => service.dio.interceptors.remove(interceptor));
 
     final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
+    await container.read(notificationListProvider(NotificationReadFilter.all).future);
+    final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
 
     final pending = notifier.loadMore();
     await requested.future;
@@ -380,7 +380,7 @@ void main() {
     );
     await pending;
 
-    final current = container.read(notificationListProvider).value!;
+    final current = container.read(notificationListProvider(NotificationReadFilter.all)).value!;
     expect(current.single.id, 80);
     expect(current.single.read, isTrue);
     expect(notifier.historyOffset, 60);
@@ -388,7 +388,7 @@ void main() {
 
     await notifier.loadMore();
     expect(offsets, [60, 60]);
-    expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.map((n) => n.id), [
       80,
       75,
     ]);
@@ -437,8 +437,8 @@ void main() {
     addTearDown(() => service.dio.interceptors.remove(interceptor));
 
     final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
+    await container.read(notificationListProvider(NotificationReadFilter.all).future);
+    final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
     final pendingCategory = notifier.setCategory(NotificationCategory.mentions);
     await firstRecentStarted.future;
     await notifier.markAllAsRead();
@@ -449,8 +449,8 @@ void main() {
     await pendingCategory;
 
     expect(recentCalls, 2);
-    expect(container.read(notificationListProvider).isLoading, isFalse);
-    final current = container.read(notificationListProvider).value!;
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).isLoading, isFalse);
+    final current = container.read(notificationListProvider(NotificationReadFilter.all)).value!;
     expect(current.single.id, 42);
     expect(current.single.read, isTrue);
   });
@@ -493,15 +493,15 @@ void main() {
     addTearDown(() => service.dio.interceptors.remove(interceptor));
 
     final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
+    await container.read(notificationListProvider(NotificationReadFilter.all).future);
+    final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
     await notifier.setFilter(NotificationReadFilter.read);
-    expect(container.read(notificationListProvider).value!.single.id, 10);
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.single.id, 10);
 
     await notifier.markAllAsRead();
 
     expect(readRequests, 2);
-    expect(container.read(notificationListProvider).value!.map((n) => n.id), [
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.map((n) => n.id), [
       12,
       10,
     ]);
@@ -545,8 +545,8 @@ void main() {
     addTearDown(() => service.dio.interceptors.remove(interceptor));
 
     final container = _container();
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
+    await container.read(notificationListProvider(NotificationReadFilter.all).future);
+    final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
     await notifier.setFilter(NotificationReadFilter.unread);
     expect(notifier.historyOffset, 60);
 
@@ -555,6 +555,6 @@ void main() {
     await notifier.loadMore();
 
     expect(offsets, [59]);
-    expect(container.read(notificationListProvider).value!.single.id, 59);
+    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value!.single.id, 59);
   });
 }

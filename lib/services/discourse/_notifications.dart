@@ -42,7 +42,7 @@ mixin _NotificationsMixin on _DiscourseServiceBase {
     if (offset != null) {
       queryParams['offset'] = offset;
     }
-    if (filter != null) {
+    if (filter != null && filter.isNotEmpty && filter != 'all') {
       queryParams['filter'] = filter;
     }
 
