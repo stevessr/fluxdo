@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 
+import '../../services/avatar_cache_pool.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/image_decode_spec_memo.dart';
 import '../../services/svg_image_cache.dart';
@@ -119,7 +120,13 @@ class _SmartAvatarState extends State<SmartAvatar> {
   }
 
   void _setupSvgProbe(String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty || isNativeAnimatedUrl(imageUrl)) {
+    // Ordinary PNG/JPEG/WebP avatars must start their image load immediately.
+    // Only explicit .svg URLs need the disk probe; SVG disguised as a bitmap
+    // is still handled by _SvgFallbackBuilder after a decoder error.
+    if (imageUrl == null ||
+        imageUrl.isEmpty ||
+        isNativeAnimatedUrl(imageUrl) ||
+        !AvatarCachePool.isExplicitSvg(imageUrl)) {
       _svgProbeResolved = true;
       _svgProbeSync = null;
       _svgProbeFuture = null;
@@ -447,8 +454,8 @@ class _SvgFallbackBuilderState extends State<_SvgFallbackBuilder> {
     }
 
     if (!_checked) {
-      // 检测中，显示空白避免闪烁
-      return const SizedBox.shrink();
+      // Never leave an empty hole when the bitmap decoder rejects an image.
+      return widget.fallback;
     }
 
     return widget.fallback;

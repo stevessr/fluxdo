@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter/rendering.dart'
     show
@@ -32,6 +32,7 @@ import '../../providers/download_provider.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/external_plugin_service.dart';
 import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
@@ -635,6 +636,44 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       );
     }
     setState(() => _showMentionSuggestions = false);
+  }
+
+  /// Companion images are chat attachments, not post markdown.
+  /// Do not consume a result while a thread dialog or another composer owns
+  /// the topmost route.
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted) return;
+    unawaited(_attachGeneratedImage(image));
+  }
+
+  Future<void> _attachGeneratedImage(GeneratedPluginImage image) async {
+    if (!mounted) return;
+    setState(() => _isUploadingImage = true);
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        p.join(
+          directory.path,
+          '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+        ),
+      );
+      await file.writeAsBytes(image.bytes);
+      if (!mounted) return;
+      final ok = await _uploadAndTrackImage(file.path);
+      if (mounted && !ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.chat_upload_failed('1/1'))),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.chat_upload_failed('1/1'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
   }
 
   /// 多选并逐张上传图片附件；每张选完立即进预览条（uploadId 为 null 表示上传中）
@@ -1478,9 +1517,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 controller: _searchController,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  hintText: '搜索此对话中的消息',
-                ).withoutBorder(),
+                decoration: const InputDecoration(hintText: '搜索此对话中的消息')
+                    .withoutBorder(),
                 onSubmitted: _runChannelSearch,
               ),
               actions: [
@@ -2347,6 +2385,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   SizedBox(
                     height: 280,
                     child: EmojiStickerPanel(
+                      onGeneratedImage: _onPluginImageAvailable,
                       onEmojiSelected: _onEmojiSelected,
                       onStickerSelected: _onStickerSelected,
                       onBackspace: _onEmojiBackspace,

@@ -99,6 +99,7 @@ class EmojiHandler extends ChangeNotifier {
   /// /emojis.json 的按需完整目录。bootstrap customEmoji 是启动期权威来源；
   /// picker/SWR catalog 到达后用于补充标准表情与异常站点的兼容数据。
   Map<String, String> _catalogEmojiMap = {};
+  Set<String> _catalogCustomEmojiNames = {};
   Future<void>? _catalogInflight;
   bool _catalogLoaded = false;
   int _catalogRevision = 0;
@@ -114,6 +115,7 @@ class EmojiHandler extends ChangeNotifier {
     if (!preload.isLoaded) {
       final hadCatalog = _catalogEmojiMap.isNotEmpty || _catalogLoaded;
       _catalogEmojiMap = {};
+      _catalogCustomEmojiNames = {};
       _catalogLoaded = false;
       _catalogRevision++;
       _catalogInflight = null;
@@ -160,16 +162,28 @@ class EmojiHandler extends ChangeNotifier {
   /// current bootstrap's custom URLs take precedence over an older snapshot.
   void registerCatalog(Map<String, List<Emoji>> groups) {
     final updated = <String, String>{};
-    for (final emojis in groups.values) {
-      for (final emoji in emojis) {
-        if (emoji.name.isNotEmpty && emoji.url.isNotEmpty) {
-          updated[normalizeEmojiShortcodeName(emoji.name).toLowerCase()] =
-              emoji.url;
+    final customNames = <String>{};
+    for (final group in groups.entries) {
+      for (final emoji in group.value) {
+        if (emoji.name.isEmpty || emoji.url.isEmpty) continue;
+        final name = normalizeEmojiShortcodeName(emoji.name).toLowerCase();
+        updated[name] = emoji.url;
+        // /emojis.json contains *standard* groups too. Marking every
+        // catalog hit as custom disables post styles after opening the
+        // picker; only site-defined entries must be protected.
+        if (group.key.toLowerCase() == 'custom' ||
+            emoji.group.toLowerCase() == 'custom') {
+          customNames.add(name);
         }
       }
     }
-    if (updated.isEmpty || mapEquals(_catalogEmojiMap, updated)) return;
+    if (updated.isEmpty ||
+        (mapEquals(_catalogEmojiMap, updated) &&
+         setEquals(_catalogCustomEmojiNames, customNames))) {
+      return;
+    }
     _catalogEmojiMap = updated;
+    _catalogCustomEmojiNames = customNames;
     notifyListeners();
   }
 
@@ -222,7 +236,10 @@ class EmojiHandler extends ChangeNotifier {
   /// 格式像短代码,但不是表情,保持原文。
   bool exists(String name) {
     final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
-    if (_customEmojiMap.containsKey(normalized)) return true;
+    if (_customEmojiMap.containsKey(normalized) ||
+        _catalogEmojiMap.containsKey(normalized)) {
+      return true;
+    }
     final toneMatch = _toneRegex.firstMatch(normalized);
     return standardEmojiNames.contains(toneMatch?.group(1) ?? normalized);
   }
@@ -247,14 +264,16 @@ class EmojiHandler extends ChangeNotifier {
   }
 
   /// Explicit server-uploaded custom emojis must not be restyled or replaced.
-  bool isCustomEmoji(String name) => _customEmojiMap.containsKey(
-    normalizeEmojiShortcodeName(name).toLowerCase(),
-  );
+  bool isCustomEmoji(String name) {
+    final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
+    return _customEmojiMap.containsKey(normalized) ||
+        _catalogCustomEmojiNames.contains(normalized);
+  }
 
   /// 获取 emoji 的完整 URL
   ///
   /// 优先查找自定义 emoji（有服务端提供的真实 URL），
-  /// 未找到则使用标准 emoji 的确定性路径（[displaySet] 表情集）。
+  /// 未找到则使用标准 emoji 的确定性路径（[siteSet] 表情集）。
   String getEmojiUrl(String name, {String? serverUrl}) {
     final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
 
@@ -270,7 +289,7 @@ class EmojiHandler extends ChangeNotifier {
     return _buildStandardEmojiUrl(normalized);
   }
 
-  /// 标准 emoji 的确定性地址：展示表情集 + 站点 external_emoji_url 前缀。
+  /// 标准 emoji 的确定性地址：站点表情集 + 站点 external_emoji_url 前缀。
   ///
   /// Mirror Discourse buildEmojiUrl：站点把表情图托管在别的域名时按其前缀
   /// 拼接，否则落到本站 `/images/emoji/{set}/…`。
@@ -281,10 +300,10 @@ class EmojiHandler extends ChangeNotifier {
         .trim();
     final path = _standardName(normalized);
     if (external == null || external.isEmpty) {
-      return UrlHelper.resolveUrlWithCdn(_standardPath(displaySet, path));
+      return UrlHelper.resolveUrlWithCdn(_standardPath(siteSet, path));
     }
     final basePath = external.replaceFirst(RegExp(r'/+$'), '');
-    return UrlHelper.resolveUrlWithCdn('$basePath/$displaySet/$path.png');
+    return UrlHelper.resolveUrlWithCdn('$basePath/$siteSet/$path.png');
   }
 
   /// 指定表情集下标准 emoji 的地址(设置页预览各风格用,不做展示改写)。
@@ -303,7 +322,7 @@ class EmojiHandler extends ChangeNotifier {
   String? animatedUrl(String name) {
     if (!animationEnabled) return null;
     final normalized = normalizeEmojiShortcodeName(name);
-    if (_customEmojiMap.containsKey(normalized)) return null;
+    if (isCustomEmoji(normalized)) return null;
     return UrlHelper.resolveUrlWithCdn(
       '/images/emoji/$_animatedSet/${_standardName(normalized)}.avif'
       '?v=$_imageVersion',

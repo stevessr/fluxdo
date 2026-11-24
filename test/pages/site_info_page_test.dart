@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/pages/site_info_page.dart';
@@ -98,7 +98,6 @@ void main() {
     expect(find.text('Test Forum'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-
 
   testWidgets('policy hyperlinks reuse the current site information route', (
     tester,

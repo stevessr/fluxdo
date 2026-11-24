@@ -1,11 +1,13 @@
 import 'package:emoji_extension/emoji_extension.dart' hide Emoji;
 import 'package:material_ui/material_ui.dart';
-import 'package:common_ui/common_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
+import '../../services/fonts/emoji_font_service.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import '../../utils/emoji_shortcodes.dart';
 
 /// Maps standard emoji shortcodes to Google Noto Emoji artwork without changing the
 /// original Discourse shortcode or replacing site-uploaded custom emoji.
@@ -16,6 +18,12 @@ class EmojiStyleAssets {
   EmojiStyleAssets._();
 
   static final Map<String, String?> _unicodeCache = <String, String?>{};
+
+  /// Only cooked floor/post content may use the optional dynamic/3D artwork.
+  static EmojiRenderStyle effectiveStyle(
+    EmojiRenderStyle requested, {
+    required bool usePostStyle,
+  }) => usePostStyle ? requested : EmojiRenderStyle.normal;
 
   static String? unicodeFor(String name) {
     final normalized = name.trim().replaceAll(RegExp(r'^:+|:+$'), '').toLowerCase();
@@ -40,6 +48,21 @@ class EmojiStyleAssets {
     if (_unicodeCache.length >= 4096) _unicodeCache.clear();
     _unicodeCache[normalized] = unicode;
     return unicode;
+  }
+
+  /// Discourse's own generated artwork sets include shortcode aliases and
+  /// tone variants. Pin the source commit for reproducible fallback downloads.
+  static const _artworkRevision = 'b805eda63e1768ea861ff2fe00cf30c2ce2c504b';
+
+  static String? staticUrlFor(String name, String set, {bool pinned = false}) {
+    if (!EmojiHandler.selectableSets.contains(set)) return null;
+    final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
+    if (!RegExp(r'^[a-z0-9_+-]+(?::t[1-6])?$').hasMatch(normalized)) return null;
+    final path = normalized.replaceFirst(':t', '/');
+    final encoded = path.split('/').map(Uri.encodeComponent).join('/');
+    return pinned
+        ? 'https://raw.githubusercontent.com/discourse/discourse-emojis/$_artworkRevision/dist/emoji/$set/$encoded.png'
+        : 'https://emoji.discourse-cdn.com/$set/$encoded.png?v=16';
   }
 
   static String? urlFor(String name, EmojiRenderStyle style) {
@@ -71,13 +94,14 @@ class EmojiStyleAssets {
   }
 }
 
-/// Server emoji by default; post body renderers explicitly opt into user artwork.
+/// One widget for post HTML, chat reactions, editor/picker and inline text.
 /// Any unsupported/missing Google Noto asset falls back to the server's real emoji.
 class StyledEmojiImage extends StatelessWidget {
   const StyledEmojiImage({
     super.key,
     required this.name,
     this.serverUrl,
+    this.usePostStyle = false,
     this.width,
     this.height,
     this.cacheWidth,
@@ -85,11 +109,14 @@ class StyledEmojiImage extends StatelessWidget {
     this.gaplessPlayback = true,
     this.showPlaceholder = false,
     this.errorFallback,
-    this.useRenderStyle = false,
   });
 
   final String name;
   final String? serverUrl;
+
+  /// Opt-in only for actual floor/post body HTML. Picker, composer, reactions,
+  /// notifications, profile pages and chat always use the site's normal emoji.
+  final bool usePostStyle;
   final double? width;
   final double? height;
   final int? cacheWidth;
@@ -97,27 +124,33 @@ class StyledEmojiImage extends StatelessWidget {
   final bool gaplessPlayback;
   final bool showPlaceholder;
   final Widget? errorFallback;
-  final bool useRenderStyle;
 
   @override
   Widget build(BuildContext context) {
-    if (!useRenderStyle) {
-      return _buildImage(context, EmojiRenderStyle.normal);
+    if (!usePostStyle) {
+      return _buildImage(context, EmojiRenderStyle.normal, EmojiHandler.followSite);
     }
     return Consumer(
       builder: (context, ref, _) => _buildImage(
         context,
         ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle)),
+        ref.watch(preferencesProvider.select((p) => p.emojiStyle)),
       ),
     );
   }
 
-  Widget _buildImage(BuildContext context, EmojiRenderStyle style) {
+  Widget _buildImage(BuildContext context, EmojiRenderStyle style, String set) {
     return AnimatedBuilder(
       animation: EmojiHandler(),
       builder: (context, _) {
         final regularUrl = EmojiHandler().getEmojiUrl(name, serverUrl: serverUrl);
-        final styledUrl = EmojiStyleAssets.urlFor(name, style);
+        final custom = EmojiHandler().isCustomEmoji(name);
+        final dynamicUrl = custom || !usePostStyle
+            ? null : EmojiStyleAssets.urlFor(name, style);
+        final staticUrl = custom || !usePostStyle
+            ? null : EmojiStyleAssets.staticUrlFor(name, set);
+        final pinnedUrl = staticUrl == null ? null :
+            EmojiStyleAssets.staticUrlFor(name, set, pinned: true);
         Widget normalImage() => _image(
           context,
           regularUrl,
@@ -127,11 +160,69 @@ class StyledEmojiImage extends StatelessWidget {
             overflow: TextOverflow.clip,
           ),
         );
-        if (styledUrl == null || styledUrl == regularUrl) {
-          return normalImage();
+        Widget selectedStatic() {
+          if (staticUrl == null || staticUrl == regularUrl) return normalImage();
+          final fallback = pinnedUrl == null
+              ? normalImage()
+              : _image(context, pinnedUrl, onError: normalImage());
+          return _image(context, staticUrl, onError: fallback);
         }
-        return _image(context, styledUrl, onError: normalImage());
+        if (dynamicUrl != null) {
+          return _image(context, dynamicUrl, onError: selectedStatic());
+        }
+        if (custom || !usePostStyle || style != EmojiRenderStyle.normal) {
+          return selectedStatic();
+        }
+        final unicode = EmojiStyleAssets.unicodeFor(name);
+        final cp = EmojiFontFace.simpleScalar(unicode);
+        if (set == 'unicode' && cp != null) {
+          return _glyph(context, String.fromCharCodes([cp, 0xfe0f]));
+        }
+        if (cp == null || !EmojiFontSpec.bySet.containsKey(set)) {
+          return selectedStatic();
+        }
+        final ready = EmojiFontService.instance.ready(set);
+        if (ready != null) {
+          final glyph = ready.glyphFor(unicode);
+          return glyph == null ? selectedStatic() : _glyph(context, glyph, family: ready.family);
+        }
+        return FutureBuilder<EmojiFontFace?>(
+          future: EmojiFontService.instance.ensure(set),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              // Temporarily use the system glyph without requesting one PNG
+              // per emoji while the selected font is being downloaded.
+              return _glyph(context, String.fromCharCodes([cp, 0xfe0f]));
+            }
+            final face = snapshot.data;
+            final glyph = face?.glyphFor(unicode);
+            return glyph == null ? selectedStatic() : _glyph(context, glyph, family: face!.family);
+          },
+        );
       },
+    );
+  }
+
+  Widget _glyph(BuildContext context, String glyph, {String? family}) {
+    final size = height ?? width ?? 18;
+    return SizedBox(
+      width: width ?? size,
+      height: height ?? size,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Text(
+          glyph,
+          maxLines: 1,
+          textScaler: TextScaler.noScaling,
+          style: TextStyle(
+            inherit: false,
+            fontFamily: family,
+            fontSize: size,
+            height: 1,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ),
     );
   }
 

@@ -1,0 +1,159 @@
+name: Check scope (reusable)
+on:
+  workflow_call:
+    inputs:
+      workflow_file:
+        required: true
+        type: string
+      patterns:
+        required: true
+        type: string
+    outputs:
+      run:
+        value: ${{ jobs.scope.outputs.run }}
+      previous_head:
+        value: ${{ jobs.scope.outputs.previous_head }}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+      previous_head: ${{ steps.select.outputs.previous_head }}
+    steps:
+      - name: Compare against last successful check on this PR
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+          PATTERNS: ${{ inputs.patterns }}
+        run: |
+          python3 - <<'PY'
+          import io, json, os, re, urllib.parse, urllib.request, zipfile
+
+          class SafeRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+                  if redirected and urllib.parse.urlparse(newurl).netloc != urllib.parse.urlparse(req.full_url).netloc:
+                      redirected.remove_header('Authorization')
+                  return redirected
+
+          def api(path, params=None, binary=False):
+              url = os.environ['GITHUB_API_URL'] + '/repos/' + os.environ['GITHUB_REPOSITORY'] + path
+              if params:
+                  url += '?' + urllib.parse.urlencode(params)
+              req = urllib.request.Request(url, headers={
+                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                  'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+              })
+              with urllib.request.build_opener(SafeRedirect()).open(req, timeout=15) as response:
+                  return response.read() if binary else json.load(response)
+
+          def baseline(run):
+              artifacts = api('/actions/runs/' + str(run['id']) + '/artifacts', {'name': 'scope-baseline'})['artifacts']
+              valid = [a for a in artifacts if not a['expired']]
+              if len(valid) != 1:
+                  return None
+              data = api('/actions/artifacts/' + str(valid[0]['id']) + '/zip', binary=True)
+              with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                  return json.loads(archive.read('scope-baseline.json'))
+
+          def matches(path, patterns):
+              selected = False
+              for pattern in patterns:
+                  negative = pattern.startswith('!')
+                  if negative:
+                      pattern = pattern[1:]
+                  regex = ''
+                  i = 0
+                  while i < len(pattern):
+                      if pattern[i:i+3] == '**/':
+                          regex += '(?:.*/)?'
+                          i += 3
+                      elif pattern[i:i+2] == '**':
+                          regex += '.*'
+                          i += 2
+                      elif pattern[i] == '*':
+                          regex += '[^/]*'
+                          i += 1
+                      else:
+                          regex += re.escape(pattern[i])
+                          i += 1
+                  if re.fullmatch(regex, path):
+                      selected = not negative
+              return selected
+
+          previous_head = ''
+
+          def plan():
+              global previous_head
+              if os.environ['GITHUB_EVENT_NAME'] != 'pull_request':
+                  return True, 'push or manual run'
+              if int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')) > 1:
+                  return True, 'explicit rerun'
+              with open(os.environ['GITHUB_EVENT_PATH']) as f:
+                  event = json.load(f)
+              pr = event['pull_request']
+              head, base = pr['head']['sha'], pr['base']['sha']
+              with open('scope-baseline.json', 'w') as f:
+                  json.dump({'head': head, 'base': base, 'pr': pr['number']}, f)
+              workflow = urllib.parse.quote(os.environ['WORKFLOW_FILE'].split('/')[-1], safe='')
+              runs = api('/actions/workflows/' + workflow + '/runs', {
+                  'event': 'pull_request', 'branch': pr['head']['ref'],
+                  'status': 'completed', 'per_page': 100,
+              })['workflow_runs']
+              for run in runs:
+                  if run['id'] == int(os.environ['GITHUB_RUN_ID']):
+                      continue
+                  if not any(p['number'] == pr['number'] for p in run.get('pull_requests', [])):
+                      continue
+                  if run['head_repository']['id'] != pr['head']['repo']['id']:
+                      continue
+                  if run['conclusion'] != 'success':
+                      return True, 'last completed check did not pass'
+                  previous = run['head_sha']
+                  proof = baseline(run)
+                  if proof != {'head': previous, 'base': base, 'pr': pr['number']}:
+                      return True, 'no verified baseline or PR base changed'
+                  if previous == head:
+                      previous_head = previous
+                      return False, 'same previously successful head'
+                  comparison = api('/compare/' + previous + '...' + head)
+                  files = comparison.get('files')
+                  if comparison.get('status') != 'ahead' or files is None or len(files) >= 300:
+                      return True, 'comparison incomplete or history rewritten'
+                  previous_head = previous
+                  patterns = json.loads(os.environ['PATTERNS'])
+                  for file in files:
+                      for path in (file['filename'], file.get('previous_filename', '')):
+                          if matches(path, patterns):
+                              return True, 'relevant changes: ' + path
+                  return False, 'no relevant changes since last successful check'
+              return True, 'no successful baseline for this PR and base'
+
+          # Never hide a failure because the API, permissions, or history are unavailable.
+          try:
+              run, reason = plan()
+          except Exception as error:
+              previous_head = ''
+              run, reason = True, 'scope unavailable: ' + str(error)
+          print(reason)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('run=' + str(run).lower() + '\n')
+              f.write('previous_head=' + previous_head + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('Scope decision: ' + ('run' if run else 'skip') + ' — ' + reason + '\n')
+          PY
+      - name: Record exact tested PR head and base
+        if: github.event_name == 'pull_request' && github.run_attempt == 1
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: scope-baseline
+          path: scope-baseline.json
+          retention-days: 14
+          if-no-files-found: warn

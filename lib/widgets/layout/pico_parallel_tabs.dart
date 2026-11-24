@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../providers/selected_topic_provider.dart';
 import '../../services/pico_vr_service.dart';
@@ -93,83 +93,86 @@ class PicoParallelTabs extends StatelessWidget {
   Widget _buildTabBar(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
-    return Container(
-      key: const ValueKey('pico-parallel-tabs'),
-      height: 48,
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
-      ),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Icon(
-              Icons.tab_rounded,
-              size: 20,
-              color: colors.onSurfaceVariant,
+    return Material(
+      color: colors.surface,
+      child: Container(
+        key: const ValueKey('pico-parallel-tabs'),
+        height: 48,
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Icon(
+                Icons.tab_rounded,
+                size: 20,
+                color: colors.onSurfaceVariant,
+              ),
             ),
-          ),
-          if (selected.tabMode && onShowFeed != null)
-            IconButton(
-              key: const ValueKey('unified-tabs-show-list'),
-              tooltip: chinese ? '返回列表' : 'Show list',
-              onPressed: onShowFeed,
-              icon: const Icon(Icons.view_list_rounded),
-            ),
-          Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: selected.stack.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 6),
-              itemBuilder: (context, index) {
-                final entry = selected.stack[index];
-                final active =
-                    !selected.showingFeed &&
-                    index == selected.stack.length - 1;
-                final label = _tabLabel(entry, chinese);
-                return Center(
-                  child: Tooltip(
-                    message: label,
-                    child: GestureDetector(
-                      onLongPress: () => _showTabActions(context, index),
-                      child: InputChip(
-                        key: ValueKey('pico-pane-tab-$index'),
-                        selected: active,
-                        showCheckmark: false,
-                        label: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 180),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (entry.kind == PaneKind.topic &&
-                                  entry.isPrivateMessage) ...[
-                                const Icon(Icons.mail_outline_rounded, size: 15),
-                                const SizedBox(width: 5),
-                              ],
-                              Flexible(
-                                child: Text(
-                                  label,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
+            if (selected.tabMode && onShowFeed != null)
+              IconButton(
+                key: const ValueKey('unified-tabs-show-list'),
+                tooltip: chinese ? '返回列表' : 'Show list',
+                onPressed: onShowFeed,
+                icon: const Icon(Icons.view_list_rounded),
+              ),
+            Expanded(
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                itemCount: selected.stack.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 6),
+                itemBuilder: (context, index) {
+                  final entry = selected.stack[index];
+                  final active =
+                      !selected.showingFeed &&
+                      index == selected.stack.length - 1;
+                  final label = _tabLabel(entry, chinese);
+                  return Center(
+                    child: Tooltip(
+                      message: label,
+                      child: GestureDetector(
+                        onLongPress: () => _showTabActions(context, index),
+                        child: InputChip(
+                          key: ValueKey('pico-pane-tab-$index'),
+                          selected: active,
+                          showCheckmark: false,
+                          label: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 180),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (entry.kind == PaneKind.topic &&
+                                    entry.isPrivateMessage) ...[
+                                  const Icon(Icons.mail_outline_rounded, size: 15),
+                                  const SizedBox(width: 5),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    label,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                          onPressed: () => onActivate(index),
+                          onDeleted: () => onClose(index),
+                          deleteButtonTooltipMessage: chinese ? '关闭标签' : 'Close tab',
+                          visualDensity: VisualDensity.compact,
                         ),
-                        onPressed: () => onActivate(index),
-                        onDeleted: () => onClose(index),
-                        deleteButtonTooltipMessage: chinese ? '关闭标签' : 'Close tab',
-                        visualDensity: VisualDensity.compact,
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

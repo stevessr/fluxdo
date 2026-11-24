@@ -20,17 +20,36 @@ on:
       - 'test/navigation/site_info_registry_test.dart'
       - 'test/pages/site_info_page_test.dart'
       - '.github/workflows/site-information-parity.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: site-information-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/site-information-parity.yml
+      patterns: >-
+        ["lib/models/site_about.dart","lib/models/site_info_section.dart","lib/utils/link_launcher.dart","lib/models/site_policy_document.dart","lib/navigation/nav_entry_registry.dart","lib/pages/site_about_page.dart","lib/pages/site_policy_page.dart","lib/pages/site_info_page.dart","lib/pages/bottom_nav_settings_page.dart","lib/main.dart","lib/widgets/common/site_info_tabs.dart","test/models/site_about_test.dart","test/models/site_info_section_test.dart","test/models/site_policy_document_test.dart","test/navigation/site_info_registry_test.dart","test/pages/site_info_page_test.dart",".github/workflows/site-information-parity.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -40,8 +59,12 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.9'
+          flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
 
       - name: Prepare asset directories
         run: mkdir -p assets/certs

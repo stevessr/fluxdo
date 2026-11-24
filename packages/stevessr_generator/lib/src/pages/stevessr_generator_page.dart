@@ -414,7 +414,9 @@ class _StevessrGeneratorPageState extends State<StevessrGeneratorPage> {
     setState(() => _isExporting = true);
     try {
       final image = await StevessrExportService.render(
-        params: _params,
+        // Direct insertion uses PNG regardless of export preference:
+        // Discourse upload allowlists may reject SVG or AVIF, and PNG keeps alpha.
+        params: insert ? _params.copyWith(format: StevessrFormat.png) : _params,
         repaintBoundaryKey: _repaintBoundaryKey,
       );
       if (insert && widget.onInsert != null) {

@@ -148,7 +148,7 @@ class EmojiText extends StatelessWidget {
         child: RepaintBoundary(
           child: StyledEmojiImage(
             name: emojiName,
-            useRenderStyle: useRenderStyle,
+            usePostStyle: useRenderStyle,
             width: emojiSize,
             height: emojiSize,
             cacheWidth: (emojiSize * MediaQuery.devicePixelRatioOf(context)).round(),

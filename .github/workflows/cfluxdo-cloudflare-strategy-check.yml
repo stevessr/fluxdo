@@ -14,13 +14,32 @@ on:
       - 'test/accept_language_test.dart'
       - 'test/services/network/recovery/recovery_test.dart'
       - '.github/workflows/cfluxdo-cloudflare-strategy-check.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/cfluxdo-cloudflare-strategy-check.yml
+      patterns: >-
+        ["lib/constants.dart","lib/services/network/client_hints.dart","test/services/network/client_hints_test.dart","lib/services/cf_challenge_service.dart","lib/services/network/cf/**","lib/services/network/interceptors/**","lib/services/network/recovery/policies.dart","lib/services/network/discourse_dio.dart","test/accept_language_test.dart","test/services/network/recovery/recovery_test.dart",".github/workflows/cfluxdo-cloudflare-strategy-check.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   validate:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -29,8 +48,12 @@ jobs:
           submodules: recursive
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.9'
+          flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
       - run: mkdir -p assets/certs assets/images/llm
       - run: flutter pub get
       - run: dart run tool/gen_l10n.dart

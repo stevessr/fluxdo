@@ -36,6 +36,8 @@
   "appearance_dialogBlurDesc": "对话框弹出时模糊背景",
   "appearance_displayMode": "屏幕帧率",
   "appearance_displayModeAuto": "自动",
+  "appearance_displayModeSmart": "智能可变刷新率",
+  "appearance_displayModeSmartDesc": "交互和滚动时提高刷新率，静止时降低刷新率。",
   "appearance_displayModeRestartHint": "部分设备需重启应用后生效",
   "appearance_emojiStyle": "表情风格",
   "appearance_emojiStyleDesc": "帖子、回应等处标准表情的画风，仅 Noto Emoji 播放动态表情",

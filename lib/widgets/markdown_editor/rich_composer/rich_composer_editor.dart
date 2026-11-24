@@ -81,6 +81,7 @@ import '../../../services/discourse/discourse_service.dart';
 import '../../../services/discourse_cook_service.dart';
 import '../../../services/emoji_alias_service.dart';
 import '../../../services/emoji_handler.dart';
+import '../../../services/external_plugin_service.dart';
 import '../../../utils/clipboard_image_native.dart';
 import '../../../utils/dialog_utils.dart';
 import '../../../utils/fluxdo_render_callbacks.dart';
@@ -800,6 +801,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     }
     if (kDebugMode) EditorImeClient.debugLogging = true;
     _importInitial();
+  }
+
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted || _documentReplaced || _editor == null) return;
+    unawaited(_insertGeneratedImage(image));
   }
 
   /// 弹层开合同步 _showEmojiPanel(驱动工具栏表情按钮高亮)
@@ -2220,6 +2226,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 构建(或复用)EmojiStickerPanel 缓存实例,docked 与桌面悬浮弹层共用
   Widget _ensureEmojiPanelChild() {
     _emojiPanelChild ??= EmojiStickerPanel(
+      onGeneratedImage: _onPluginImageAvailable,
       // 桌面悬浮弹层:搜索走内联视图,布局按小窗收紧;
       // 面板内开 Navigator 层 sheet(表情包市场)前先收弹层
       inlineSearch: _isDesktop,
@@ -3084,6 +3091,38 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       }
     }
     return false;
+  }
+
+  /// Generator Insert goes directly into the editor's resumable upload queue.
+  /// Ordinary clipboard images still use the confirmation dialog below.
+  Future<void> _insertGeneratedImage(GeneratedPluginImage image) async {
+    final editor = _editor;
+    if (editor == null) return;
+    final bookmark = InsertionBookmark(editor);
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(
+        directory.path,
+        '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+      ));
+      await file.writeAsBytes(image.bytes);
+      if (!mounted ||
+          _documentReplaced ||
+          !identical(editor, _editor) ||
+          !bookmark.valid) {
+        return;
+      }
+      _queueUpload(
+        file.path,
+        image.fileName,
+        image: true,
+        insertionSelection: bookmark.selection,
+      );
+    } catch (error, stackTrace) {
+      AppErrorHandler.handleUnexpected(error, stackTrace);
+    } finally {
+      bookmark.dispose();
+    }
   }
 
   /// 粘贴位图上传:临时文件 → 确认框(与选图插入同 UX,可改名/取消误粘)

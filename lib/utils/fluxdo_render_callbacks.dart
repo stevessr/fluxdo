@@ -310,15 +310,16 @@ class FluxdoRenderCallbacks {
   // ==========================================================================
 
   /// Emoji 图片:走主项目 emojiImageProvider(鉴权 + CDN)。
-  static EmojiImageBuilder _emojiBuilder({required bool useRenderStyle}) => (ctx, emoji, size) {
+  static EmojiImageBuilder _emojiBuilder({bool usePostStyle = false}) =>
+      (ctx, emoji, size) {
     if (emoji.url.isEmpty) {
       return Text(emoji.name.isEmpty ? ':?:' : ':${emoji.name}:');
     }
     final dpr = MediaQuery.devicePixelRatioOf(ctx);
     final image = StyledEmojiImage(
       name: emoji.name,
-      useRenderStyle: useRenderStyle,
       serverUrl: emoji.url,
+      usePostStyle: usePostStyle,
       width: size,
       height: size,
       cacheWidth: (size * dpr).round(),
@@ -992,7 +993,7 @@ class FluxdoRenderCallbacks {
           },
         );
       },
-      emojiImageBuilder: _emojiBuilder(useRenderStyle: true),
+      emojiImageBuilder: _emojiBuilder(usePostStyle: true),
       mentionTapHandler: _mentionTapHandler,
       imageContentBuilder: _imageContentBuilder(
         heroNamespace: heroNamespace,
@@ -1065,8 +1066,8 @@ class FluxdoRenderCallbacks {
   /// - policy:返回 null → 子包 fallback 占位(无 post 无法交互)。
   /// - poll:静态预览卡(从 rawHtml 解选项/属性,无投票交互)——
   ///   编辑器岛预览等场景所见即所发。
-  /// - emoji 使用站点原始资源；其余(mention/code/avatar/math/svg/video/audio/
-  ///   download/iframe/localDate/imageGrid/footnote/chat)与 forPost 共享实现。
+  /// - 其余(emoji/mention/code/avatar/math/svg/video/audio/download/iframe/
+  ///   localDate/imageGrid/footnote/chat)与 forPost 完全一致(共享 static)。
   factory FluxdoRenderCallbacks.generic({
     required String heroTagNamespace,
     int? topicId,
@@ -1090,7 +1091,7 @@ class FluxdoRenderCallbacks {
           },
         );
       },
-      emojiImageBuilder: _emojiBuilder(useRenderStyle: false),
+      emojiImageBuilder: _emojiBuilder(),
       mentionTapHandler: _mentionTapHandler,
       imageContentBuilder: _imageContentBuilder(
         heroNamespace: heroTagNamespace,

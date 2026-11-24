@@ -30,11 +30,35 @@ class ExternalPlugin {
   }
 }
 
+/// A companion-generated image to be uploaded by Fluxdo's active composer.
+@immutable
+class GeneratedPluginImage {
+  const GeneratedPluginImage({required this.bytes, required this.fileName});
+  final Uint8List bytes;
+  final String fileName;
+
+  static GeneratedPluginImage? fromPlatformValue(Object? value) {
+    if (value is! Map) return null;
+    final bytes = value['bytes'];
+    final fileName = value['fileName'];
+    if (bytes is! Uint8List ||
+        bytes.isEmpty ||
+        bytes.length > 12 * 1024 * 1024 ||
+        fileName is! String ||
+        !RegExp(r'^stevessr_generated\.(png|jpg|webp|avif)$').hasMatch(fileName)) {
+      return null;
+    }
+    return GeneratedPluginImage(bytes: bytes, fileName: fileName);
+  }
+}
+
 /// 外部插件只在 Android 上安装与发现；站点侧 SitePlugin 为独立机制。
 class ExternalPluginService {
   ExternalPluginService({MethodChannel? channel})
       : _channel = channel ??
-            const MethodChannel('com.github.lingyan000.fluxdo/external_plugins');
+            const MethodChannel('com.github.lingyan000.fluxdo/external_plugins') {
+    _channel.setMethodCallHandler(_onPlatformMethod);
+  }
 
   static final instance = ExternalPluginService();
 
@@ -42,6 +66,18 @@ class ExternalPluginService {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   final MethodChannel _channel;
+
+  /// A result belongs only to the editor that initiated this launch.
+  ValueChanged<GeneratedPluginImage>? _imageReceiver;
+
+  Future<void> _onPlatformMethod(MethodCall call) async {
+    if (call.method != 'generatedImage' && call.method != 'generatedImageCancelled') return;
+    final receiver = _imageReceiver;
+    _imageReceiver = null;
+    if (call.method != 'generatedImage') return;
+    final image = GeneratedPluginImage.fromPlatformValue(call.arguments);
+    if (image != null) receiver?.call(image);
+  }
 
   Future<List<ExternalPlugin>> installedPlugins() async {
     if (!isSupported) return const [];
@@ -62,17 +98,24 @@ class ExternalPluginService {
     }
   }
 
-  Future<bool> launchPlugin(ExternalPlugin plugin) async {
+  Future<bool> launchPlugin(ExternalPlugin plugin, {
+    ValueChanged<GeneratedPluginImage>? onGeneratedImage,
+  }) async {
     if (!isSupported) return false;
+    _imageReceiver = onGeneratedImage;
     try {
-      return await _channel.invokeMethod<bool>(
+      final launched = await _channel.invokeMethod<bool>(
             'launchPlugin',
             {'id': plugin.id},
           ) ??
           false;
+      if (!launched) _imageReceiver = null;
+      return launched;
     } on MissingPluginException {
+      _imageReceiver = null;
       return false;
     } on PlatformException catch (error) {
+      _imageReceiver = null;
       debugPrint('插件启动失败: ${error.message}');
       return false;
     }

@@ -11,7 +11,10 @@ void main() {
   final preload = PreloadedDataService();
   final handler = EmojiHandler();
 
-  setUp(() => preload.reset());
+  setUp(() {
+    EmojiHandler.setPreference(EmojiHandler.defaultPreference);
+    preload.reset();
+  });
   tearDown(() => preload.reset());
 
   test(
@@ -71,7 +74,7 @@ void main() {
     );
     expect(
       handler.getEmojiUrl('wave:t2'),
-      'https://emoji.example.com/assets/apple/wave/t2.png',
+      'https://emoji.example.com/assets/apple/wave/2.png',
     );
   });
 
@@ -116,6 +119,9 @@ void main() {
         handler.getEmojiUrl(name),
         'https://cdn.example.com/reactions/real.png',
       );
+      expect(handler.exists(name), isTrue);
+      expect(handler.isCustomEmoji(name), isTrue);
+      expect(handler.animatedUrl(name), isNull);
       expect(
         handler.getEmojiUrl('deleted_fixture'),
         contains('/images/emoji/twitter/deleted_fixture.png'),
@@ -132,6 +138,21 @@ void main() {
       );
     },
   );
+
+  test('standard entries in /emojis.json remain eligible for post artwork', () {
+    handler.registerCatalog({
+      'people': [
+        Emoji(
+          name: 'grinning',
+          url: 'https://cdn.example.com/emoji/standard.png',
+          group: 'people',
+        ),
+      ],
+    });
+    expect(handler.exists('grinning'), isTrue);
+    expect(handler.isCustomEmoji('grinning'), isFalse);
+    expect(handler.animatedUrl('grinning'), contains('noto_animated'));
+  });
 
   test('session reset drops server catalog URLs from the previous session', () {
     const name = 'stale_reaction_fixture';

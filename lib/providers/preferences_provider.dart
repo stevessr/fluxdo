@@ -19,6 +19,7 @@ import '../services/cf_challenge_service.dart';
 import '../services/log/log_writer.dart';
 import '../services/crash_context_reporter.dart';
 import '../services/emoji_handler.dart';
+import '../services/display_refresh_service.dart';
 import '../services/render_backend_service.dart';
 import '../utils/blocked_user_filter.dart';
 import '../widgets/topic/topic_card_layout.dart';
@@ -333,7 +334,7 @@ class AppPreferences {
   /// 玻璃效果能力档位。
   final GlassEffectLevel glassEffectLevel;
 
-  /// Android 屏幕刷新率偏好（0 = auto/跟随系统，其它为目标刷新率，如 60 / 90 / 120）
+  /// Android 屏幕刷新率偏好（-1 = auto，-2 = smart，正数为固定 Hz；旧 0 自动迁移）
   final int displayModeRefreshRate;
 
   /// 话题底栏手势总开关（拖动定位、上滑、长按菜单）
@@ -425,7 +426,7 @@ class AppPreferences {
     this.bottomNavFloating = false,
     this.glassEnabled = true,
     this.glassEffectLevel = GlassEffectLevel.auto,
-    this.displayModeRefreshRate = 0,
+    this.displayModeRefreshRate = DisplayRefreshService.auto,
     this.progressGesturesEnabled = true,
     this.progressGestureSwipeUp = ProgressGestureAction.jumpToUnread,
     this.progressGestureLongPressEnabled = true,
@@ -810,7 +811,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
             _prefs.getString(_glassEffectLevelKey),
           ),
           displayModeRefreshRate:
-              _prefs.getInt(_displayModeRefreshRateKey) ?? 0,
+              DisplayRefreshService.normalize(_prefs.getInt(_displayModeRefreshRateKey)),
           progressGesturesEnabled:
               _prefs.getBool(_progressGesturesEnabledKey) ?? true,
           progressGestureSwipeUp: _readGestureAction(
@@ -1269,9 +1270,10 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     await _prefs.setString(_glassEffectLevelKey, level.name);
   }
 
-  /// 设置 Android 屏幕刷新率偏好（0 = auto，其它为目标刷新率整数）。
-  /// 实际生效由调用方在写入后调用 FlutterDisplayMode.setPreferredMode 完成。
+  /// 设置 Android 屏幕刷新率偏好（-1 = auto，-2 = smart，正数为固定 Hz）。
+  /// 实际生效由 DisplayRefreshService 统一处理。
   Future<void> setDisplayModeRefreshRate(int rate) async {
+    rate = DisplayRefreshService.normalize(rate);
     if (state.displayModeRefreshRate == rate) return;
     state = state.copyWith(displayModeRefreshRate: rate);
     await _prefs.setInt(_displayModeRefreshRateKey, rate);

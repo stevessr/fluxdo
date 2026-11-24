@@ -13,11 +13,12 @@ CONFIG = json.loads(Path(__file__).with_suffix('.json').read_text())
 
 
 def plan(paths, all_platforms=False):
-    ci = any(p.startswith(('tool/ci/', '.github/workflows/network-')) for p in paths)
+    ci = any(p.startswith(('tool/ci/', '.github/workflows/network-')) or
+             p == '.github/workflows/_check-scope.yml' for p in paths)
     core = any(p.startswith('core/net_core/') for p in paths)
     dart = ci or any(p.startswith(('lib/', 'test/', 'packages/', '.agents/')) or
                      p in ('pubspec.yaml', 'pubspec.lock', 'AGENTS.md', '.gitmodules',
-                           'analysis_options.yaml', 'tool/gen_l10n.dart', 'tool/project_prep.dart')
+                           'analysis_options.yaml', '.fvmrc', 'tool/gen_l10n.dart', 'tool/project_prep.dart')
                      for p in paths)
     python = ci or core or any(p.startswith('tool/') for p in paths)
     platforms = [dict(platform=row['platform'], os=row['os']) for row in CONFIG['platforms']

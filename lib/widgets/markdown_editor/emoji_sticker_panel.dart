@@ -27,6 +27,8 @@ class EmojiStickerPanel extends StatefulWidget {
   /// 选中表情包的回调，参数为 Markdown 图片文本
   final ValueChanged<String> onStickerSelected;
 
+  final ValueChanged<GeneratedPluginImage>? onGeneratedImage;
+
   /// 退格回调(移动端表情键盘标配:面板打开时软键盘收起,没有它
   /// 就只能切回键盘删)。null 或桌面端不显示退格键(桌面端焦点常驻
   /// 输入框,物理退格直接可用)。
@@ -52,6 +54,7 @@ class EmojiStickerPanel extends StatefulWidget {
     super.key,
     required this.onEmojiSelected,
     required this.onStickerSelected,
+    this.onGeneratedImage,
     this.onBackspace,
     this.inlineSearch = false,
     this.compact = false,
@@ -85,7 +88,9 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel>
   List<ExternalPlugin> _externalPlugins = const [];
 
   Future<void> _refreshExternalPlugins() async {
-    final plugins = await ExternalPluginService.instance.installedPlugins();
+    final plugins = widget.onGeneratedImage == null
+        ? const <ExternalPlugin>[]
+        : await ExternalPluginService.instance.installedPlugins();
     if (!mounted) return;
     final unchanged = plugins.length == _externalPlugins.length &&
         plugins.asMap().entries.every((entry) =>
@@ -103,7 +108,9 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel>
   }
 
   Future<void> _openExternalPlugin(ExternalPlugin plugin) async {
-    final opened = await ExternalPluginService.instance.launchPlugin(plugin);
+    final opened = await ExternalPluginService.instance.launchPlugin(
+      plugin, onGeneratedImage: widget.onGeneratedImage,
+    );
     if (!mounted) return;
     if (!opened) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -324,6 +324,38 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// StevesSR generator's explicit Insert action bypasses the extra picker
+  /// confirmation and queues the exact PNG bytes at the captured caret.
+  Future<void> insertGeneratedImageFromBytes({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final anchor = _uploadAnchors.capture();
+    var registered = false;
+    _uploadingCount++;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final file = File(p.join(
+        tempDir.path,
+        '${DateTime.now().microsecondsSinceEpoch}_$fileName',
+      ));
+      await file.writeAsBytes(bytes);
+      if (!mounted) return;
+      _enqueueUpload(
+        path: file.path,
+        name: fileName,
+        anchor: anchor,
+        image: true,
+      );
+      registered = true;
+    } catch (error, stackTrace) {
+      AppErrorHandler.handleUnexpected(error, stackTrace);
+    } finally {
+      _uploadingCount--;
+      if (!registered) _uploadAnchors.release(anchor);
+    }
+  }
+
   /// 插入文本到光标位置
   void insertText(String text) {
     final selection = widget.controller.selection;

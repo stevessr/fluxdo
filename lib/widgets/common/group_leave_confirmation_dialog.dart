@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A shared, explicit confirmation for leaving a Discourse group.
 ///
@@ -11,7 +12,7 @@ Future<bool> confirmLeaveGroup(
   final zh = Localizations.localeOf(context).languageCode.toLowerCase() == 'zh';
   final scheme = Theme.of(context).colorScheme;
 
-  return await showDialog<bool>(
+  return await showInteractionDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           icon: Icon(Icons.logout_rounded, color: scheme.error),

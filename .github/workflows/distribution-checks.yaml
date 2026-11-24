@@ -17,22 +17,38 @@ on:
       - scripts/ci/macos/test_package_auth.py
   pull_request:
     paths:
-      - scripts/ci/*distribution_manifests.py
-      - scripts/ci/publish_release.py
-      - scripts/ci/test_publish_release.py
-      - .github/workflows/distribution-checks.yaml
-      - .github/workflows/build.yaml
-      - scripts/ci/macos/setup_signing.sh
-      - scripts/ci/macos/test_setup_signing.py
-      - scripts/ci/macos/setup_package_auth.sh
-      - scripts/ci/macos/xcrun
-      - scripts/ci/macos/test_package_auth.py
+      - 'scripts/ci/*distribution_manifests.py'
+      - 'scripts/ci/publish_release.py'
+      - 'scripts/ci/test_publish_release.py'
+      - '.github/workflows/distribution-checks.yaml'
+      - '.github/workflows/build.yaml'
+      - 'scripts/ci/macos/setup_signing.sh'
+      - 'scripts/ci/macos/test_setup_signing.py'
+      - 'scripts/ci/macos/setup_package_auth.sh'
+      - 'scripts/ci/macos/xcrun'
+      - 'scripts/ci/macos/test_package_auth.py'
+      - '.github/workflows/_check-scope.yml'
+      - 'macos/**'
+      - 'scripts/ci/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/distribution-checks.yaml
+      patterns: >-
+        ["scripts/ci/*distribution_manifests.py","scripts/ci/publish_release.py","scripts/ci/test_publish_release.py",".github/workflows/distribution-checks.yaml",".github/workflows/build.yaml","scripts/ci/macos/setup_signing.sh","scripts/ci/macos/test_setup_signing.py","scripts/ci/macos/setup_package_auth.sh","scripts/ci/macos/xcrun","scripts/ci/macos/test_package_auth.py",".github/workflows/_check-scope.yml","macos/**","scripts/ci/**","pubspec.yaml","pubspec.lock",".fvmrc"]
+
   release-publication:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +56,8 @@ jobs:
         run: python3 -m unittest discover -s scripts/ci -p test_publish_release.py
 
   macos-packages:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: macos-latest
     timeout-minutes: 20
     strategy:
@@ -77,6 +95,8 @@ jobs:
           test -f build/macos/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update
 
   manifests:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:

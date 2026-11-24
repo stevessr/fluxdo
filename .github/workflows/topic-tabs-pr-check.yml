@@ -25,16 +25,37 @@ on:
       - 'test/widgets/layout/pane_filmstrip_master_only_test.dart'
       - 'test/widgets/layout/pane_projection_test.dart'
       - '.github/workflows/topic-tabs-pr-check.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
+
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: topic-tabs-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/topic-tabs-pr-check.yml
+      patterns: >-
+        ["lib/main.dart","lib/pages/topic_detail_page/topic_detail_page.dart","lib/pages/topic_detail_page/topic_more_menu_actions.dart","lib/pages/topics_page.dart","lib/pages/topics_screen.dart","lib/pages/private_messages_page.dart","lib/providers/preferences_provider.dart","lib/providers/selected_topic_provider.dart","lib/providers/app_state_refresher.dart","lib/settings/definitions/custom_settings_defs.dart","lib/widgets/layout/pico_parallel_tabs.dart","lib/widgets/layout/pane_filmstrip.dart","lib/widgets/layout/master_detail_layout.dart","lib/widgets/layout/pane_projection_back_scope.dart","test/pages/topic_detail_page/topic_more_menu_actions_test.dart","test/providers/preferences_provider_test.dart","test/providers/selected_topic_provider_test.dart","test/widgets/layout/unified_topic_tabs_test.dart","test/widgets/layout/master_detail_layout_test.dart","test/widgets/layout/pane_filmstrip_master_only_test.dart","test/widgets/layout/pane_projection_test.dart",".github/workflows/topic-tabs-pr-check.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -44,8 +65,12 @@ jobs:
           submodules: recursive
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.9'
+          flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
       - name: Prepare generated asset directories
         run: mkdir -p assets/certs assets/images/llm
       - name: Resolve dependencies and generate localizations

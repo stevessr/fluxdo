@@ -73,19 +73,21 @@ class GalleryInfo {
   /// [spoilerImageUrls] 可选，标记哪些图片在 spoiler 内
   static GalleryInfo fromImages(List<String> images, {Set<String>? spoilerImageUrls}) {
     final Map<String, int> thumbnailToIndex = {};
+    final originalUrls = <String>[];
 
     for (var i = 0; i < images.length; i++) {
       final url = images[i];
       thumbnailToIndex[url] = i;
       // 同时添加原图 URL 作为 key
       final originalUrl = DiscourseImageUtils.getOriginalUrl(url);
+      originalUrls.add(originalUrl);
       if (originalUrl != url) {
         thumbnailToIndex[originalUrl] = i;
       }
     }
 
     return GalleryInfo._(
-      originalUrls: images,
+      originalUrls: originalUrls,
       thumbnailToIndex: thumbnailToIndex,
       spoilerImageUrls: spoilerImageUrls,
     );
@@ -256,7 +258,9 @@ class DiscourseImageUtils {
       var original = optimizedUrl.replaceFirst('/optimized/', '/original/');
 
       // 2. 移除分辨率后缀 (e.g. _2_690x270)
-      final regex = RegExp(r'_\d+_\d+x\d+(?=\.[a-zA-Z0-9]+$)');
+      // A query/fragment must not prevent removal of Discourse's
+      // optimized-size suffix (e.g. _2_690x270.png?v=1).
+      final regex = RegExp(r'_\d+_\d+x\d+(?=\.[a-zA-Z0-9]+(?:[?#]|$))');
       if (regex.hasMatch(original)) {
         original = original.replaceAll(regex, '');
       }

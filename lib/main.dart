@@ -32,7 +32,7 @@ import 'widgets/common/app_glass_settings.dart';
 import 'widgets/user/account_switcher_sheet.dart';
 
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter_displaymode/flutter_displaymode.dart';
+import 'services/display_refresh_service.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'services/network/cookie/csrf_token_service.dart';
@@ -167,34 +167,12 @@ Future<bool> _initRhttp() async {
 }
 
 /// 应用 Android 屏幕刷新率偏好。
-/// 偏好值 0 表示跟随系统（auto），非 0 则按目标刷新率从 supported 中选最匹配的 mode。
+/// 旧 0 自动归一化为 -1；-2 为智能策略，正数为固定刷新率。
 /// 失败不阻塞启动。
-Future<void> _applyAndroidDisplayMode(SharedPreferences prefs) async {
-  final targetRate = prefs.getInt('pref_display_mode_refresh_rate') ?? 0;
-  try {
-    if (targetRate == 0) {
-      await FlutterDisplayMode.setPreferredMode(DisplayMode.auto);
-      return;
-    }
-    final modes = await FlutterDisplayMode.supported;
-    final active = await FlutterDisplayMode.active;
-    // 优先选分辨率匹配 active 的相同刷新率 mode；否则退化为任意分辨率
-    final matches = modes
-        .where((m) => m.refreshRate.round() == targetRate)
-        .toList();
-    if (matches.isEmpty) {
-      await FlutterDisplayMode.setPreferredMode(DisplayMode.auto);
-      return;
-    }
-    final picked = matches.firstWhere(
-      (m) => m.width == active.width && m.height == active.height,
-      orElse: () => matches.first,
+Future<void> _applyAndroidDisplayMode(SharedPreferences prefs) =>
+    DisplayRefreshService.instance.apply(
+      DisplayRefreshService.normalize(prefs.getInt('pref_display_mode_refresh_rate')),
     );
-    await FlutterDisplayMode.setPreferredMode(picked);
-  } catch (e) {
-    debugPrint('[Main] 应用屏幕刷新率失败: $e');
-  }
-}
 
 // Android 新版嵌入层通过 FlutterEngineGroup 按根库函数名启动子引擎，
 // 不读取 Activity 的 libraryUri。入口必须实际声明在 main.dart 中。
@@ -953,6 +931,7 @@ class MainApp extends ConsumerWidget {
                     if (notification is ScrollUpdateNotification ||
                         notification is ScrollStartNotification) {
                       ScrollBusySignal.touch();
+                      DisplayRefreshService.instance.interaction();
                     }
                     return false;
                   },

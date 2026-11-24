@@ -69,6 +69,45 @@ void main() {
     expect(await service.launchPlugin(plugin), isFalse);
   });
 
+  test('generated image is delivered once to the initiating composer', () async {
+    final service = ExternalPluginService(channel: channel);
+    const plugin = ExternalPlugin(id: 'example.plugin/Main', packageName: 'example.plugin', label: 'Generator');
+    messenger.setMockMethodCallHandler(channel, (_) async => true);
+    final received = <GeneratedPluginImage>[];
+    expect(await service.launchPlugin(plugin, onGeneratedImage: received.add), isTrue);
+    final payload = const StandardMethodCodec().encodeMethodCall(MethodCall('generatedImage', {
+      'bytes': Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]),
+      'fileName': 'stevessr_generated.png',
+    }));
+    await messenger.handlePlatformMessage(channel.name, payload, (_) {});
+    await messenger.handlePlatformMessage(channel.name, payload, (_) {});
+    expect(received, hasLength(1));
+  });
+
+  test('generated image handoff validates name, type and size', () {
+    final bytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+    final image = GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': 'stevessr_generated.png',
+    });
+    expect(image, isNotNull);
+    expect(image!.bytes, same(bytes));
+    expect(image.fileName, 'stevessr_generated.png');
+
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': '../unsafe.png',
+    }), isNull);
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': 'stevessr_generated.svg',
+    }), isNull);
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': Uint8List(12 * 1024 * 1024 + 1),
+      'fileName': 'stevessr_generated.png',
+    }), isNull);
+  });
+
   test('非 Android 平台不会尝试调用原生插件通道', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     messenger.setMockMethodCallHandler(channel, (call) async {
