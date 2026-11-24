@@ -38,7 +38,8 @@ class NotificationListNotifier
   int _historyOffset = 0;
   int _refreshGeneration = 0;
   bool _needsManualLoadMore = false;
-  NotificationListNotifier(this._filter, [
+  NotificationListNotifier(
+    this._filter, [
     this._category = NotificationCategory.all,
   ]);
 
@@ -473,10 +474,8 @@ final notificationCategoryHistoryProvider = AsyncNotifierProvider.family
       List<DiscourseNotification>,
       NotificationCategory
     >(
-      (category) => NotificationListNotifier(
-        NotificationReadFilter.all,
-        category,
-      ),
+      (category) =>
+          NotificationListNotifier(NotificationReadFilter.all, category),
     );
 
 /// Iterate without reading providers so background events never instantiate tabs.

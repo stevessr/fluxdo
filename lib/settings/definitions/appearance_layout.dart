@@ -12,7 +12,13 @@ enum AppearanceSection {
     'glassEffectLevel',
     'dialogBlur',
   }),
-  interface({'appIcon', 'emojiStyle', 'displayMode', 'topicCardStyle'}),
+  interface({
+    'appIcon',
+    'emojiRenderStyle',
+    'emojiStyle',
+    'displayMode',
+    'topicCardStyle',
+  }),
   festival({
     'festivalEnabled',
     'festivalGreeting',
