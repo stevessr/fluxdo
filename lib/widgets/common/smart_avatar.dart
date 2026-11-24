@@ -201,10 +201,9 @@ class _SmartAvatarState extends State<SmartAvatar> {
     if (widget.border is Border) {
       borderWidth = (widget.border as Border).top.width;
     }
-    final innerRadius = (widget.radius - borderWidth).clamp(
-      0.0,
-      double.infinity,
-    );
+    final innerRadius = (widget.radius - borderWidth)
+        .clamp(0.0, double.infinity)
+        .toDouble();
     final innerSize = innerRadius * 2;
 
     Widget child;
