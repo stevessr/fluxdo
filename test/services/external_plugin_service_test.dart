@@ -58,6 +58,20 @@ void main() {
     expect(await ExternalPluginService(channel: channel).launchPlugin(plugin), isTrue);
   });
 
+  test('launch forwards optional appearance without changing plugin identity', () async {
+    const plugin = ExternalPlugin(
+      id: 'example.plugin/Main', packageName: 'example.plugin', label: 'Generator',
+    );
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'launchPlugin');
+      expect(call.arguments, {'id': plugin.id, 'theme': '{"version":1}'});
+      return true;
+    });
+    expect(await ExternalPluginService(channel: channel).launchPlugin(
+      plugin, themeSnapshot: '{"version":1}',
+    ), isTrue);
+  });
+
   test('未安装或原生通道不可用时显示空列表并安全回退', () async {
     final service = ExternalPluginService(channel: channel);
     expect(await service.installedPlugins(), isEmpty);

@@ -8,6 +8,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  common_ui:
+    path: ../common_ui
+  material_ui: ^1.11.1
   file_picker: ^10.3.10
   image: ^4.10.1
   flutter_avif: ^3.1.0

@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../l10n/s.dart';
 import '../services/external_plugin_service.dart';
@@ -40,7 +41,10 @@ class _InstalledPluginsPageState extends State<InstalledPluginsPage>
   }
 
   Future<void> _launch(ExternalPlugin plugin) async {
-    final opened = await ExternalPluginService.instance.launchPlugin(plugin);
+    final opened = await ExternalPluginService.instance.launchPlugin(
+      plugin,
+      themeSnapshot: PluginTheme.encode(Theme.of(context)),
+    );
     if (!mounted || opened) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(context.l10n.externalPlugin_openFailed)),

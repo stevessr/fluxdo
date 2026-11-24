@@ -109,7 +109,9 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel>
 
   Future<void> _openExternalPlugin(ExternalPlugin plugin) async {
     final opened = await ExternalPluginService.instance.launchPlugin(
-      plugin, onGeneratedImage: widget.onGeneratedImage,
+      plugin,
+      onGeneratedImage: widget.onGeneratedImage,
+      themeSnapshot: PluginTheme.encode(Theme.of(context)),
     );
     if (!mounted) return;
     if (!opened) {

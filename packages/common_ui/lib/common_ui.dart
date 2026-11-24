@@ -34,3 +34,5 @@ export 'src/route_motion_hold.dart';
 export 'src/ui_decor.dart';
 export 'src/ui_emphasis.dart';
 export 'src/ui_shapes.dart';
+
+export 'src/plugin_theme.dart';
