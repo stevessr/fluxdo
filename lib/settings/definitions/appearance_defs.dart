@@ -22,6 +22,8 @@ import '../../services/discourse_cache_manager.dart'
     show BlobImageCache, BlobImageProvider;
 import '../../services/data_management/cache_size_service.dart';
 import '../../services/emoji_handler.dart';
+import '../../services/display_refresh_service.dart';
+import '../../widgets/common/styled_emoji_image.dart';
 import '../../services/fonts/font_catalog.dart';
 import '../../services/fonts/font_download_service.dart';
 import '../../services/fonts/font_sources.dart';
@@ -587,7 +589,7 @@ class _EmojiStyleSection extends ConsumerWidget {
                           padding: const EdgeInsets.only(left: 6),
                           child: Image(
                             image: BlobImageProvider(
-                              EmojiHandler.urlForSet(name, set),
+                              EmojiStyleAssets.staticUrlFor(name, set) ?? EmojiHandler.urlForSet(name, set),
                               bucket: BlobImageCache.emojiBucket,
                             ),
                             width: 22,
@@ -658,24 +660,7 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
     await ref
         .read(preferencesProvider.notifier)
         .setDisplayModeRefreshRate(rate);
-    try {
-      if (rate == 0) {
-        await FlutterDisplayMode.setPreferredMode(DisplayMode.auto);
-      } else {
-        final matches = modes
-            .where((m) => m.refreshRate.round() == rate)
-            .toList();
-        if (matches.isNotEmpty) {
-          final picked = matches.firstWhere(
-            (m) => m.width == active.width && m.height == active.height,
-            orElse: () => matches.first,
-          );
-          await FlutterDisplayMode.setPreferredMode(picked);
-        }
-      }
-    } catch (e) {
-      debugPrint('[DisplayMode] 切换刷新率失败: $e');
-    }
+    await DisplayRefreshService.instance.apply(rate);
   }
 
   @override
@@ -711,7 +696,10 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
           // 去重 + 高到低排序
           final uniqueRates = <int>{};
           for (final m in data.modes) {
-            uniqueRates.add(m.refreshRate.round());
+            if (m.refreshRate.isFinite && m.refreshRate.round() > 0 &&
+                m.width == data.active.width && m.height == data.active.height) {
+              uniqueRates.add(m.refreshRate.round());
+            }
           }
           final sortedRates = uniqueRates.toList()
             ..sort((a, b) => b.compareTo(a));
@@ -743,8 +731,13 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         RadioListTile<int>(
-                          value: 0,
+                          value: DisplayRefreshService.auto,
                           title: Text(l10n.appearance_displayModeAuto),
+                        ),
+                        RadioListTile<int>(
+                          value: DisplayRefreshService.smart,
+                          title: Text(l10n.appearance_displayModeSmart),
+                          subtitle: Text(l10n.appearance_displayModeSmartDesc),
                         ),
                         for (final rate in sortedRates)
                           RadioListTile<int>(

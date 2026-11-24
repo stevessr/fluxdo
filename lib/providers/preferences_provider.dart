@@ -1,5 +1,7 @@
 import '../constants/composer_tool_defaults.dart';
 
+import '../services/display_refresh_service.dart';
+
 import 'dart:io';
 
 import '../modules/mini_apps/mini_app_engine.dart';
@@ -425,7 +427,7 @@ class AppPreferences {
     this.bottomNavFloating = false,
     this.glassEnabled = true,
     this.glassEffectLevel = GlassEffectLevel.auto,
-    this.displayModeRefreshRate = 0,
+    this.displayModeRefreshRate = DisplayRefreshService.auto,
     this.progressGesturesEnabled = true,
     this.progressGestureSwipeUp = ProgressGestureAction.jumpToUnread,
     this.progressGestureLongPressEnabled = true,
@@ -810,7 +812,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
             _prefs.getString(_glassEffectLevelKey),
           ),
           displayModeRefreshRate:
-              _prefs.getInt(_displayModeRefreshRateKey) ?? 0,
+              DisplayRefreshService.normalize(_prefs.getInt(_displayModeRefreshRateKey)),
           progressGesturesEnabled:
               _prefs.getBool(_progressGesturesEnabledKey) ?? true,
           progressGestureSwipeUp: _readGestureAction(
@@ -1272,6 +1274,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   /// 设置 Android 屏幕刷新率偏好（0 = auto，其它为目标刷新率整数）。
   /// 实际生效由调用方在写入后调用 FlutterDisplayMode.setPreferredMode 完成。
   Future<void> setDisplayModeRefreshRate(int rate) async {
+    rate = DisplayRefreshService.normalize(rate);
     if (state.displayModeRefreshRate == rate) return;
     state = state.copyWith(displayModeRefreshRate: rate);
     await _prefs.setInt(_displayModeRefreshRateKey, rate);

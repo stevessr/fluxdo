@@ -11,7 +11,10 @@ void main() {
   final preload = PreloadedDataService();
   final handler = EmojiHandler();
 
-  setUp(() => preload.reset());
+  setUp(() {
+    EmojiHandler.setPreference(EmojiHandler.defaultPreference);
+    preload.reset();
+  });
   tearDown(() => preload.reset());
 
   test(
@@ -71,7 +74,7 @@ void main() {
     );
     expect(
       handler.getEmojiUrl('wave:t2'),
-      'https://emoji.example.com/assets/apple/wave/t2.png',
+      'https://emoji.example.com/assets/apple/wave/2.png',
     );
   });
 

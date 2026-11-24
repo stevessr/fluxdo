@@ -300,10 +300,10 @@ class EmojiHandler extends ChangeNotifier {
         .trim();
     final path = _standardName(normalized);
     if (external == null || external.isEmpty) {
-      return UrlHelper.resolveUrlWithCdn(_standardPath(displaySet, path));
+      return UrlHelper.resolveUrlWithCdn(_standardPath(siteSet, path));
     }
     final basePath = external.replaceFirst(RegExp(r'/+$'), '');
-    return UrlHelper.resolveUrlWithCdn('$basePath/$displaySet/$path.png');
+    return UrlHelper.resolveUrlWithCdn('$basePath/$siteSet/$path.png');
   }
 
   /// 指定表情集下标准 emoji 的地址(设置页预览各风格用,不做展示改写)。

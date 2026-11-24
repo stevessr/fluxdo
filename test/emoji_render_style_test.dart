@@ -26,6 +26,12 @@ void main() {
     }
   });
 
+  test('static Noto artwork uses a downloadable PNG, not a system font', () {
+    expect(EmojiStyleAssets.staticUrlFor('grinning', 'noto'),
+      'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.png');
+    expect(EmojiStyleAssets.staticUrlFor('grinning', 'site'), isNull);
+  });
+
   test('normal style does not request third-party artwork', () {
     expect(EmojiStyleAssets.urlForUnicode('1f600', EmojiRenderStyle.normal), isNull);
   });

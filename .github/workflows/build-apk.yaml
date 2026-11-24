@@ -39,7 +39,7 @@ concurrency:
 
 env:
   # 与 pubspec.yaml / .fvmrc 及主构建工作流统一，避免旧版本不满足 SDK 约束。
-  FLUTTER_VERSION: '3.47.9'
+  FLUTTER_VERSION: '3.50.1'
   # 与 upstream/dev 及主构建工作流的 NDK 版本保持一致。
   ANDROID_NDK_VERSION: '27.3.13750724'
 

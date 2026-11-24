@@ -47,6 +47,14 @@ class EmojiStyleAssets {
     return unicode;
   }
 
+  /// Official static Noto artwork; no system font installation required.
+  static String? staticUrlFor(String name, String set) {
+    if (set != 'noto') return null;
+    final unicode = unicodeFor(name);
+    if (unicode == null) return null;
+    return 'https://fonts.gstatic.com/s/e/notoemoji/latest/$unicode/512.png';
+  }
+
   static String? urlFor(String name, EmojiRenderStyle style) {
     if (style == EmojiRenderStyle.normal) return null;
     if (EmojiHandler().isCustomEmoji(name)) return null;
@@ -116,11 +124,29 @@ class StyledEmojiImage extends ConsumerWidget {
       requestedStyle,
       usePostStyle: usePostStyle,
     );
+    final set = usePostStyle
+        ? ref.watch(preferencesProvider.select((p) => p.emojiStyle))
+        : EmojiHandler.followSite;
     return AnimatedBuilder(
       animation: EmojiHandler(),
       builder: (context, _) {
         final regularUrl = EmojiHandler().getEmojiUrl(name, serverUrl: serverUrl);
-        final styledUrl = EmojiStyleAssets.urlFor(name, style);
+        final custom = EmojiHandler().isCustomEmoji(name);
+        final styledUrl = custom || !usePostStyle ? null :
+            EmojiStyleAssets.urlFor(name, style) ??
+            EmojiStyleAssets.staticUrlFor(name, set) ??
+            (set == EmojiHandler.followSite || set == 'unicode'
+                ? null : EmojiHandler.displayUrl(regularUrl));
+        if (!custom && usePostStyle && set == 'unicode' &&
+            style == EmojiRenderStyle.normal) {
+          final unicode = EmojiStyleAssets.unicodeFor(name);
+          if (unicode != null) {
+            final glyph = String.fromCharCodes(
+              unicode.split('_').map((part) => int.parse(part, radix: 16)),
+            );
+            return Text(glyph, style: TextStyle(fontSize: height ?? width));
+          }
+        }
         Widget normalImage() => _image(
           context,
           regularUrl,
