@@ -61,11 +61,18 @@ void main() {
 
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    final subscription = container.listen(notificationListProvider(NotificationReadFilter.all), (_, _) {});
+    final subscription = container.listen(
+      notificationListProvider(NotificationReadFilter.all),
+      (_, _) {},
+    );
     addTearDown(subscription.close);
 
-    await container.read(notificationListProvider(NotificationReadFilter.all).future);
-    final notifier = container.read(notificationListProvider(NotificationReadFilter.all).notifier);
+    await container.read(
+      notificationListProvider(NotificationReadFilter.all).future,
+    );
+    final notifier = container.read(
+      notificationListProvider(NotificationReadFilter.all).notifier,
+    );
 
     final first = notifier.setCategory(NotificationCategory.mentions);
     await mentionsRequested.future;
@@ -78,7 +85,14 @@ void main() {
     await first;
 
     expect(notifier.category, NotificationCategory.replies);
-    expect(container.read(notificationListProvider(NotificationReadFilter.all)).value?.single.id, 2);
+    expect(
+      container
+          .read(notificationListProvider(NotificationReadFilter.all))
+          .value
+          ?.single
+          .id,
+      2,
+    );
     expect(notifier.hasMore, isTrue);
   });
 }
