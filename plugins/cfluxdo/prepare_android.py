@@ -10,6 +10,10 @@ import xml.etree.ElementTree as ET
 
 ANDROID_NS = "http://schemas.android.com/apk/res/android"
 ANDROID = "{" + ANDROID_NS + "}"
+TOOLS = "{http://schemas.android.com/tools}"
+ET.register_namespace("tools", "http://schemas.android.com/tools")
+BLOCKED_PERMISSIONS = {"android.permission.QUERY_ALL_PACKAGES", "android.permission.REQUEST_INSTALL_PACKAGES"}
+PERMISSION_TAGS = ("uses-permission", "uses-permission-sdk-23")
 ACTION = "com.github.lingyan000.fluxdo.action.PLUGIN"
 API_META = "com.github.lingyan000.fluxdo.plugin.API_VERSION"
 CATEGORY_META = "com.github.lingyan000.fluxdo.plugin.CATEGORY"
@@ -88,12 +92,15 @@ def patch(root: Path, plugin: str) -> None:
     auth_data.set(ANDROID + "host", AUTH_HOST)
 
     # 购物与 CDK 不需要安装其他 APK 或扫描所有已安装应用。
-    for permission in list(tree.getroot().findall("uses-permission")):
-        if permission.get(ANDROID + "name") in {
-            "android.permission.REQUEST_INSTALL_PACKAGES",
-            "android.permission.QUERY_ALL_PACKAGES",
-        }:
-            tree.getroot().remove(permission)
+    # 阻止依赖库在 Manifest 合并时重新引入禁用权限。
+    for tag in PERMISSION_TAGS:
+        for permission in list(tree.getroot().findall(tag)):
+            if permission.get(ANDROID + "name") in BLOCKED_PERMISSIONS:
+                tree.getroot().remove(permission)
+        for name in sorted(BLOCKED_PERMISSIONS):
+            tree.getroot().insert(0, ET.Element(tag, {
+                ANDROID + "name": name, TOOLS + "node": "remove",
+            }))
 
     ET.indent(tree, space="    ")
     tree.write(manifest, encoding="unicode", xml_declaration=True)
@@ -178,12 +185,14 @@ def verify(root: Path, plugin: str) -> None:
         and child.get(ANDROID + "value") == "app"
         for child in matches[0].findall("meta-data")
     ), "business plugins must be categorized as app"
-    permissions = {
-        item.get(ANDROID + "name")
-        for item in tree.getroot().findall("uses-permission")
-    }
-    assert "android.permission.QUERY_ALL_PACKAGES" not in permissions
-    assert "android.permission.REQUEST_INSTALL_PACKAGES" not in permissions
+    for tag in PERMISSION_TAGS:
+        for name in BLOCKED_PERMISSIONS:
+            entries = [item for item in tree.getroot().findall(tag)
+                       if item.get(ANDROID + "name") == name]
+            assert len(entries) == 1, f"missing/duplicate removal marker: {tag} {name}"
+            assert entries[0].attrib == {
+                ANDROID + "name": name, TOOLS + "node": "remove",
+            }, f"permission must be removed during manifest merging: {name}"
     gradle = (root / "android/app/build.gradle.kts").read_text(encoding="utf-8")
     assert 'applicationId = "' + config["package"] + '"' in gradle
     auth_service = (root / "lib/services/user_api_key_service.dart").read_text(

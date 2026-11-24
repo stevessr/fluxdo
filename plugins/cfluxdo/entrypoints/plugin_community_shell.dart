@@ -34,10 +34,12 @@ Future<void> startCommunityPlugin(
       );
     } else if (++attempts < 30) {
       WidgetsBinding.instance.addPostFrameCallback(openWhenReady);
+      WidgetsBinding.instance.ensureVisualUpdate();
     }
   }
 
   WidgetsBinding.instance.addPostFrameCallback(openWhenReady);
+  WidgetsBinding.instance.ensureVisualUpdate();
 }
 
 class _PluginRoot extends ConsumerWidget {
@@ -50,7 +52,7 @@ class _PluginRoot extends ConsumerWidget {
       MaterialPageRoute<void>(builder: (_) => const LoginPage()),
     );
     // 从登录流程返回后重新查询论坛会话，让 CDK/商城识别当前用户。
-    ref.invalidate(currentUserProvider);
+    if (context.mounted) ref.invalidate(currentUserProvider);
   }
 
   @override

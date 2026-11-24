@@ -150,11 +150,13 @@ jobs:
           grep -Fq "package: name='$PACKAGE_NAME'" /tmp/plugin-badging.txt
           grep -Fq 'com.github.lingyan000.fluxdo.action.PLUGIN' /tmp/plugin-xmltree.txt
           grep -Fq 'com.github.lingyan000.fluxdo.plugin.API_VERSION' /tmp/plugin-xmltree.txt
+          grep -Fq 'com.github.lingyan000.fluxdo.plugin.CATEGORY' /tmp/plugin-xmltree.txt
           grep -Fq 'android.intent.action.VIEW' /tmp/plugin-xmltree.txt
           grep -Fq 'discourse' /tmp/plugin-xmltree.txt
           grep -Fq 'auth_redirect' /tmp/plugin-xmltree.txt
           if grep -Fq 'android.permission.QUERY_ALL_PACKAGES' /tmp/plugin-badging.txt || \
              grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' /tmp/plugin-badging.txt; then
+            grep -E 'android.permission.(QUERY_ALL_PACKAGES|REQUEST_INSTALL_PACKAGES)' /tmp/plugin-badging.txt
             echo '工具插件不得拥有扫描所有应用或安装 APK 的权限'
             exit 1
           fi

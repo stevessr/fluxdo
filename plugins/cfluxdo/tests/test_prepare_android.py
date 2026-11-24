@@ -17,6 +17,9 @@ from prepare_android import (  # noqa: E402
     AUTH_SCHEME,
     CATEGORY_META,
     PLUGINS,
+    TOOLS,
+    BLOCKED_PERMISSIONS,
+    PERMISSION_TAGS,
     patch,
     verify,
 )
@@ -130,10 +133,27 @@ class PrepareAndroidTest(unittest.TestCase):
                     for element in ET.parse(self.manifest).getroot().findall(
                         "uses-permission"
                     )
+                    if element.get(TOOLS + "node") != "remove"
                 }
                 self.assertIn("android.permission.CAMERA", all_permissions)
                 self.assertNotIn("android.permission.QUERY_ALL_PACKAGES", all_permissions)
                 self.assertNotIn("android.permission.REQUEST_INSTALL_PACKAGES", all_permissions)
+
+    def test_rejects_missing_permission_removal_marker(self) -> None:
+        patch(self.root, "cdk")
+        tree = ET.parse(self.manifest)
+        for tag in PERMISSION_TAGS:
+            for name in BLOCKED_PERMISSIONS:
+                matches = [item for item in tree.getroot().findall(tag)
+                           if item.get(ANDROID + "name") == name]
+                self.assertEqual(len(matches), 1)
+                self.assertEqual(matches[0].get(TOOLS + "node"), "remove")
+        marker = next(item for item in tree.getroot().findall("uses-permission")
+                      if item.get(ANDROID + "name") in BLOCKED_PERMISSIONS)
+        del marker.attrib[TOOLS + "node"]
+        tree.write(self.manifest, encoding="unicode")
+        with self.assertRaises(AssertionError):
+            verify(self.root, "cdk")
 
     def test_rejects_broader_auth_callback(self) -> None:
         patch(self.root, "cdk")
