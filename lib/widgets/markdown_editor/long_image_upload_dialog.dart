@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, UiEmphasis;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -189,7 +189,7 @@ class _LongImageUploadDialogState extends State<LongImageUploadDialog> {
                 Icon(
                   Icons.content_cut_rounded,
                   size: 18,
-                  color: theme.colorScheme.primary,
+                  color: UiEmphasis.of(theme).accent,
                 ),
                 const SizedBox(width: 8),
                 Expanded(

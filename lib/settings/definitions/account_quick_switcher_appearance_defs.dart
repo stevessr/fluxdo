@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, UiEmphasisContext;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -56,7 +56,7 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
                   ListTile(
                     leading: Icon(
                       Icons.touch_app_outlined,
-                      color: scheme.primary,
+                      color: context.emphasis.accent,
                     ),
                     title: Text(copy.holdDurationTitle),
                     subtitle: Text(
@@ -84,7 +84,7 @@ SettingsGroup buildAccountQuickSwitcherAppearanceGroup(BuildContext context) {
                       preferences.trigger == AccountQuickSwitchTrigger.release
                           ? Icons.touch_app_outlined
                           : Icons.timer_outlined,
-                      color: scheme.primary,
+                      color: context.emphasis.accent,
                     ),
                     title: Text(copy.triggerTitle),
                     subtitle: Text(

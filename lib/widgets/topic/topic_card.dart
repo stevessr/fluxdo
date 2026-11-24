@@ -1145,7 +1145,7 @@ class CompactTopicCard extends ConsumerWidget {
                               child: Icon(
                                 Symbols.push_pin_rounded,
                                 size: 14,
-                                color: theme.colorScheme.primary,
+                                color: UiEmphasis.of(theme).selected,
                               ),
                             ),
                           ),

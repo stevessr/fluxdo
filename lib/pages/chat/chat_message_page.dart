@@ -1929,7 +1929,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.push_pin_rounded,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).selected,
               ),
               title: Text(context.l10n.chat_view_pinned_messages),
             ),
@@ -1942,7 +1942,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.forum_outlined,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).accent,
               ),
               title: const Text('消息串列表'),
             ),
@@ -2428,7 +2428,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           Icon(
             isEditing ? Icons.edit_outlined : Icons.reply_rounded,
             size: 18,
-            color: theme.colorScheme.primary,
+            color: UiEmphasis.of(theme).accent,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -3254,7 +3254,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                               Icon(
                                 Icons.reply,
                                 size: 14,
-                                color: theme.colorScheme.primary,
+                                color: UiEmphasis.of(theme).accent,
                               ),
                               const SizedBox(width: 4),
                               Flexible(
@@ -4118,7 +4118,7 @@ class _PinnedMessagesSheet extends ConsumerWidget {
                 Icon(
                   Icons.push_pin_rounded,
                   size: 20,
-                  color: theme.colorScheme.primary,
+                  color: UiEmphasis.of(theme).selected,
                 ),
                 const SizedBox(width: 8),
                 Text(

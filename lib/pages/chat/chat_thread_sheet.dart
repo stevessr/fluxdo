@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute, UiEmphasis;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -961,7 +961,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
               Icon(
                 Icons.forum_outlined,
                 size: 16,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).accent,
               ),
               const SizedBox(width: 6),
               Text(
@@ -1077,7 +1077,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                         Icon(
                           isEditing ? Icons.edit_outlined : Icons.reply_rounded,
                           size: 18,
-                          color: theme.colorScheme.primary,
+                          color: UiEmphasis.of(theme).accent,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -1461,7 +1461,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                       Icon(
                         Icons.push_pin_outlined,
                         size: 12,
-                        color: theme.colorScheme.primary,
+                        color: UiEmphasis.of(theme).selected,
                       ),
                       const SizedBox(width: 4),
                       Text(

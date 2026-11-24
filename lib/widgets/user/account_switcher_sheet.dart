@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext, UiEmphasis;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -838,7 +838,7 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
                 Icon(
                   Symbols.manage_accounts_rounded,
                   size: 20,
-                  color: theme.colorScheme.primary,
+                  color: UiEmphasis.of(theme).accent,
                 ),
                 const SizedBox(width: 16),
                 Expanded(

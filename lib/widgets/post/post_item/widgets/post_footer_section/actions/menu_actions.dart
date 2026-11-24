@@ -738,7 +738,7 @@ class _PostJsonNode extends StatelessWidget {
             leading: Icon(
               _typeIcon(),
               size: 20,
-              color: theme.colorScheme.primary,
+              color: UiEmphasis.of(theme).accent,
             ),
             title: SelectableText(
               name,

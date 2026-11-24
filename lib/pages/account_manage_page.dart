@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, UiEmphasis;
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -225,7 +225,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
                               ),
                               child: Icon(
                                 Symbols.person_add_rounded,
-                                color: theme.colorScheme.primary,
+                                color: UiEmphasis.of(theme).accent,
                                 size: 20,
                               ),
                             ),

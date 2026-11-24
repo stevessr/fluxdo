@@ -68,7 +68,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             return ListTile(
               leading: Icon(
                 Icons.emoji_emotions_outlined,
-                color: Theme.of(context).colorScheme.primary,
+                color: context.emphasis.accent,
               ),
               title: Text(localized('Emoji 风格', 'Emoji 風格', 'Emoji style')),
               subtitle: Text(label(selected)),
@@ -86,7 +86,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
                           subtitle: Text(description(style)),
                           trailing: selected == style
                               ? Icon(Icons.check,
-                                  color: Theme.of(sheetContext).colorScheme.primary)
+                                  color: sheetContext.emphasis.selected)
                               : null,
                           onTap: () {
                             ref.read(preferencesProvider.notifier)

@@ -283,7 +283,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             leading: SizedBox(
               width: 28,
               child: selected
-                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  ? Icon(Icons.check_rounded, color: UiEmphasis.of(theme).selected)
                   : null,
             ),
             title: Text(title),
@@ -348,7 +348,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             leading: SizedBox(
               width: 28,
               child: selected
-                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  ? Icon(Icons.check_rounded, color: UiEmphasis.of(theme).selected)
                   : null,
             ),
             title: Text(title),

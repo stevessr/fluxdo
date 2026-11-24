@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute, showInteractionDialog, UiShapesContext;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, showInteractionDialog, UiShapesContext, UiEmphasisContext;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -260,7 +260,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                       ],
                     ),
                   ),
-                  icon: Icon(AppIcons.info, color: colors.primary),
+                  icon: Icon(AppIcons.info, color: context.emphasis.accent),
                 ),
               ],
             ),
@@ -480,7 +480,7 @@ class _PeriodSelector extends StatelessWidget {
                       ),
                     ),
                     if (period == selected)
-                      Icon(AppIcons.check, size: 18, color: colors.primary),
+                      Icon(AppIcons.check, size: 18, color: context.emphasis.selected),
                   ],
                 ),
               );
@@ -697,7 +697,7 @@ class _LeaderboardRankingHeading extends StatelessWidget {
           Text(copy.rank, style: theme.textTheme.titleSmall),
           Row(
             children: [
-              Icon(AppIcons.medal, size: 18, color: colors.primary),
+              Icon(AppIcons.medal, size: 18, color: context.emphasis.accent),
               const SizedBox(width: 6),
               Text(copy.points, style: theme.textTheme.titleSmall),
             ],
@@ -811,7 +811,7 @@ class _LeaderboardTile extends StatelessWidget {
                     ? Icon(
                         Symbols.emoji_events_rounded,
                         size: 22,
-                        color: colors.primary,
+                        color: context.emphasis.accent,
                       )
                     : Text(
                         '#${entry.position}',

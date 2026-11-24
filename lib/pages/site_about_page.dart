@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext, UiEmphasis;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -269,7 +269,7 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 20, color: theme.colorScheme.primary),
+            Icon(icon, size: 20, color: UiEmphasis.of(theme).accent),
             const SizedBox(width: 8),
             Text(
               value,

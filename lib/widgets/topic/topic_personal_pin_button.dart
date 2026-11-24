@@ -1,4 +1,4 @@
-import 'package:common_ui/common_ui.dart' show showInteractionBottomSheet, UiShapesContext;
+import 'package:common_ui/common_ui.dart' show showInteractionBottomSheet, UiShapesContext, UiEmphasisContext;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -190,7 +190,7 @@ class _TopicPersonalPinButtonState
       children: [
         Icon(
           pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-          color: selected ? colors.primary : colors.onSurfaceVariant,
+          color: selected ? context.emphasis.selected : colors.onSurfaceVariant,
         ),
         const SizedBox(width: 12),
         Flexible(
@@ -210,7 +210,7 @@ class _TopicPersonalPinButtonState
         ),
         if (selected) ...[
           const SizedBox(width: 12),
-          Icon(Icons.check_rounded, size: 18, color: colors.primary),
+          Icon(Icons.check_rounded, size: 18, color: context.emphasis.selected),
         ],
       ],
     );
@@ -238,7 +238,7 @@ class _TopicPersonalPinButtonState
                 trailing: pinned == isPinned
                     ? Icon(
                         Icons.check_rounded,
-                        color: Theme.of(sheetContext).colorScheme.primary,
+                        color: sheetContext.emphasis.selected,
                       )
                     : null,
                 selected: pinned == isPinned,
