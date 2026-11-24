@@ -38,11 +38,9 @@ class NotificationListNotifier
   int _historyOffset = 0;
   int _refreshGeneration = 0;
   bool _needsManualLoadMore = false;
-  NotificationListNotifier(
-    NotificationReadFilter filter, {
-    NotificationCategory category = NotificationCategory.all,
-  }) : _filter = filter,
-       _category = category;
+  NotificationListNotifier(this._filter, [
+    this._category = NotificationCategory.all,
+  ]);
 
   NotificationReadFilter _filter;
   NotificationCategory _category;
@@ -477,7 +475,7 @@ final notificationCategoryHistoryProvider = AsyncNotifierProvider.family
     >(
       (category) => NotificationListNotifier(
         NotificationReadFilter.all,
-        category: category,
+        category,
       ),
     );
 
