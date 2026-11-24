@@ -99,7 +99,10 @@ void main() {
     );
     expect(
       coordinator.substring(start, probe),
-      contains('if (!_clearanceRecentlyRejected || proactiveVerified)'),
+      contains(
+        'if (!WebViewAdapterSettingsService.instance.effectiveEnabled &&\n'
+        '        (!_clearanceRecentlyRejected || proactiveVerified))',
+      ),
     );
 
     final body = coordinator.substring(verify, start);

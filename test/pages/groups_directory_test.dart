@@ -269,15 +269,22 @@ void main() {
         child: const MaterialApp(home: GroupsPage()),
       ),
     );
-    await tester.pump();
+    // Dio schedules interceptor work asynchronously; wait for the first
+    // request to start without settling its deliberately blocked response.
+    for (var i = 0; i < 50 && requestedTypes.isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
     expect(requestedTypes, [null]);
 
     await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-filter-my')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-filter-public')));
     await tester.pump();
 

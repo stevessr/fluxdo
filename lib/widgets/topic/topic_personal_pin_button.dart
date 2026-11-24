@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show showInteractionBottomSheet, UiShapesContext, UiEmphasisContext;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -189,7 +190,7 @@ class _TopicPersonalPinButtonState
       children: [
         Icon(
           pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-          color: selected ? colors.primary : colors.onSurfaceVariant,
+          color: selected ? context.emphasis.selected : colors.onSurfaceVariant,
         ),
         const SizedBox(width: 12),
         Flexible(
@@ -209,7 +210,7 @@ class _TopicPersonalPinButtonState
         ),
         if (selected) ...[
           const SizedBox(width: 12),
-          Icon(Icons.check_rounded, size: 18, color: colors.primary),
+          Icon(Icons.check_rounded, size: 18, color: context.emphasis.selected),
         ],
       ],
     );
@@ -220,7 +221,7 @@ class _TopicPersonalPinButtonState
     bool isPinned,
   ) async {
     final requestedTopicId = widget.topicId;
-    final choice = await showModalBottomSheet<bool>(
+    final choice = await showInteractionBottomSheet<bool>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
@@ -237,7 +238,7 @@ class _TopicPersonalPinButtonState
                 trailing: pinned == isPinned
                     ? Icon(
                         Icons.check_rounded,
-                        color: Theme.of(sheetContext).colorScheme.primary,
+                        color: sheetContext.emphasis.selected,
                       )
                     : null,
                 selected: pinned == isPinned,
@@ -285,7 +286,7 @@ class _TopicPersonalPinButtonState
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: context.shapes.borderRadius(8),
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Row(
@@ -334,7 +335,7 @@ class _TopicPersonalPinButtonState
             onTap: _mutating
                 ? null
                 : () => unawaited(_showMobileOptions(state, isPinned)),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: context.shapes.borderRadius(8),
             child: trigger,
           ),
         ),

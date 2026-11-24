@@ -1,3 +1,5 @@
+import 'package:common_ui/common_ui.dart' show showInteractionDialog;
+
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -112,7 +114,7 @@ List<SettingsGroup> buildCustomSettingsGroups(BuildContext context) {
             icon: Icons.verified_user_outlined,
             wrapSubtitle: true,
             onTap: (context, ref) {
-              showDialog<void>(
+              showInteractionDialog<void>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
                   title: Text(copy.mobileSourceTitle),
@@ -167,7 +169,7 @@ Future<void> _showMobileSourceModelDialog(
   );
 
   try {
-    final result = await showDialog<String>(
+    final result = await showInteractionDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(copy.mobileSourceModelDialogTitle),
@@ -302,8 +304,7 @@ class _CustomSettingsCopy {
     preloadCacheClearFailed: '清理预加载缓存失败。',
     cfVerificationGroupTitle: 'Cloudflare 验证（实验性）',
     proactiveCfBeforePreloadTitle: '预加载前主动过盾',
-    proactiveCfBeforePreloadDescription:
-        '预加载前先在后台检查 Cloudflare 验证；必要时再显示交互窗口。保留已有 Cookie，验证完成后再加载。可能增加首屏耗时，需开启自动过盾。',
+    proactiveCfBeforePreloadDescription: '预加载前先在后台检查 Cloudflare 验证；必要时再显示交互窗口。保留已有 Cookie，验证完成后再加载。可能增加首屏耗时，需开启自动过盾。',
     readingGroupTitle: '阅读增强',
     openTopicsInTabsTitle: '默认在 Tab 中打开话题',
     openTopicsInTabsDescription: '从首页打开话题时保留已有标签，支持切换和关闭；关闭后恢复原来的打开方式。',
@@ -338,8 +339,7 @@ class _CustomSettingsCopy {
     preloadCacheClearFailed: '清理預載入快取失敗。',
     cfVerificationGroupTitle: 'Cloudflare 驗證（實驗性）',
     proactiveCfBeforePreloadTitle: '預載入前主動過盾',
-    proactiveCfBeforePreloadDescription:
-        '預載入前先在背景檢查 Cloudflare 驗證；需要操作時再顯示視窗。保留既有 Cookie，驗證完成後再載入。可能增加首屏時間，需啟用自動過盾。',
+    proactiveCfBeforePreloadDescription: '預載入前先在背景檢查 Cloudflare 驗證；需要操作時再顯示視窗。保留既有 Cookie，驗證完成後再載入。可能增加首屏時間，需啟用自動過盾。',
     readingGroupTitle: '閱讀增強',
     openTopicsInTabsTitle: '預設在 Tab 中開啟話題',
     openTopicsInTabsDescription: '從首頁開啟話題時保留既有分頁，支援切換和關閉；停用後恢復原來的開啟方式。',
@@ -373,8 +373,7 @@ class _CustomSettingsCopy {
     preloadCacheClearFailed: 'Failed to clear preload cache.',
     cfVerificationGroupTitle: 'Cloudflare verification (experimental)',
     proactiveCfBeforePreloadTitle: 'Verify before preloading',
-    proactiveCfBeforePreloadDescription:
-        'Check Cloudflare in the background before preloading, showing a prompt only if needed. Preserves existing cookies and may slow startup; requires auto verification.',
+    proactiveCfBeforePreloadDescription: 'Check Cloudflare in the background before preloading, showing a prompt only if needed. Preserves existing cookies and may slow startup; requires auto verification.',
     readingGroupTitle: 'Reading enhancements',
     openTopicsInTabsTitle: 'Open topics in tabs by default',
     openTopicsInTabsDescription: 'Keep existing tabs when opening a topic from Home. Turn off to restore the original navigation.',

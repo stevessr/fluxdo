@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiEmphasisContext;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -43,7 +44,7 @@ class _CustomHostsCardState extends State<CustomHostsCard> {
             ListTile(
               leading: Icon(
                 Symbols.dns_rounded,
-                color: hasHosts ? Theme.of(context).colorScheme.primary : null,
+                color: hasHosts ? context.emphasis.selected : null,
               ),
               title: Text(context.l10n.customHosts_title),
               subtitle: Text(context.l10n.customHosts_subtitle),

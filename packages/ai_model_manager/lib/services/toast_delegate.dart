@@ -1,3 +1,4 @@
+import 'package:m3e_ui/m3e_ui.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 消息提示类型
@@ -11,8 +12,7 @@ class AiToastDelegate {
 
   /// 注入消息提示实现
   static void configure(
-    void Function(String message, {AiToastType type}) showToast,
-  ) {
+      void Function(String message, {AiToastType type}) showToast) {
     _showToast = showToast;
   }
 
@@ -29,12 +29,11 @@ class AiToastDelegate {
   }
 
   /// 自定义加载指示器构建器，由主项目注入。
-  /// 未注入时 fallback 到 [CircularProgressIndicator]。
+  /// 未注入时使用公共组件 [LoadingSpinner]。
   static Widget Function({Color? color, double size})? _loadingBuilder;
 
   static void configureLoading(
-    Widget Function({Color? color, double size}) builder,
-  ) {
+      Widget Function({Color? color, double size}) builder) {
     _loadingBuilder = builder;
   }
 
@@ -42,10 +41,6 @@ class AiToastDelegate {
     if (_loadingBuilder != null) {
       return _loadingBuilder!(color: color, size: size);
     }
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CircularProgressIndicator(strokeWidth: 2, color: color),
-    );
+    return LoadingSpinner(color: color, size: size);
   }
 }

@@ -237,8 +237,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => _PinnedMessagesSheet(
         channelId: widget.channelId,
@@ -286,8 +286,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => _ChatMessageFlagSheet(
         channelId: widget.channelId,
@@ -1009,8 +1009,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     showAppBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SizedBox(
         height: MediaQuery.of(ctx).size.height * 0.45,
@@ -1033,8 +1033,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _showQuickReactionPicker(ChatMessage message) {
     showAppBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) {
         final theme = Theme.of(ctx);
@@ -1075,15 +1075,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   )
                                   .toggleReaction(message.id, emoji);
                             },
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: context.shapes.borderRadius(20),
                             child: Container(
                               width: 44,
                               height: 44,
                               alignment: Alignment.center,
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: theme.colorScheme.surfaceContainerHighest
                                     .withValues(alpha: 0.7),
-                                shape: BoxShape.circle,
+                                shape: context.shapes.circle(),
                               ),
                               child: EmojiText(
                                 ':$emoji:',
@@ -1096,15 +1096,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             Navigator.pop(ctx);
                             _showFullEmojiPickerForReaction(message);
                           },
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: context.shapes.borderRadius(20),
                           child: Container(
                             width: 44,
                             height: 44,
                             alignment: Alignment.center,
-                            decoration: BoxDecoration(
+                            decoration: ShapeDecoration(
                               color: theme.colorScheme.primaryContainer
                                   .withValues(alpha: 0.8),
-                              shape: BoxShape.circle,
+                              shape: context.shapes.circle(),
                             ),
                             child: Icon(
                               Icons.add_rounded,
@@ -1136,8 +1136,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       if (!canModerate) return;
       showAppBottomSheet(
         context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
         ),
         builder: (ctx) => SafeArea(
           child: Column(
@@ -1179,8 +1179,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
     showAppBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
@@ -1223,15 +1223,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                           )
                                           .toggleReaction(message.id, emoji);
                                     },
-                                    borderRadius: BorderRadius.circular(24),
+                                    borderRadius: context.shapes.borderRadius(
+                                      24,
+                                    ),
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
+                                      decoration: ShapeDecoration(
                                         color: Theme.of(ctx)
                                             .colorScheme
                                             .surfaceContainerHighest
                                             .withValues(alpha: 0.7),
-                                        shape: BoxShape.circle,
+                                        shape: ctx.shapes.circle(),
                                       ),
                                       child: EmojiText(
                                         ':$emoji:',
@@ -1251,15 +1253,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               Navigator.pop(ctx);
                               _showFullEmojiPickerForReaction(message);
                             },
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: context.shapes.borderRadius(24),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: Theme.of(ctx)
                                     .colorScheme
                                     .primaryContainer
                                     .withValues(alpha: 0.7),
-                                shape: BoxShape.circle,
+                                shape: context.shapes.circle(),
                               ),
                               child: Icon(
                                 Icons.add_rounded,
@@ -1929,7 +1931,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.push_pin_rounded,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).selected,
               ),
               title: Text(context.l10n.chat_view_pinned_messages),
             ),
@@ -1942,7 +1944,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.forum_outlined,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).accent,
               ),
               title: const Text('消息串列表'),
             ),
@@ -2063,7 +2065,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             color: theme.colorScheme.surfaceContainerHighest.withValues(
               alpha: 0.6,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: context.shapes.borderRadius(12),
           ),
           child: Text(
             TimeUtils.formatShortDate(date),
@@ -2329,7 +2331,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             decoration: InputDecoration(
                               hintText: context.l10n.chat_input_hint,
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
                                 borderSide: BorderSide.none,
                               ),
                               filled: true,
@@ -2420,7 +2430,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           Icon(
             isEditing ? Icons.edit_outlined : Icons.reply_rounded,
             size: 18,
-            color: theme.colorScheme.primary,
+            color: UiEmphasis.of(theme).accent,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -2476,7 +2486,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: context.shapes.borderRadius(8),
           child: upload.path.toLowerCase().endsWith('.svg')
               ? Container(
                   width: 64,
@@ -2513,9 +2523,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           child: GestureDetector(
             onTap: () => _removeUpload(index),
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: ShapeDecoration(
                 color: Colors.black54,
-                shape: BoxShape.circle,
+                shape: context.shapes.circle(),
               ),
               child: const Icon(
                 Icons.close_rounded,
@@ -2620,7 +2630,7 @@ class _StickyChatMessageGroup extends StatelessWidget {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
+            InteractionPageRoute(
               builder: (_) => UserProfilePage(username: avatarUser.username),
             ),
           );
@@ -2897,7 +2907,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
+              InteractionPageRoute(
                 builder: (_) =>
                     UserProfilePage(username: message.user!.username),
               ),
@@ -3152,9 +3162,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                   color: theme.colorScheme.surfaceContainerHighest.withValues(
                     alpha: 0.92,
                   ),
-                  shape: const CircleBorder(),
+                  shape: context.shapes.circle(),
                   child: InkWell(
-                    customBorder: const CircleBorder(),
+                    customBorder: context.shapes.circle(),
                     onTap: onReactButtonTap,
                     child: SizedBox(
                       width: 28,
@@ -3232,7 +3242,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                           decoration: BoxDecoration(
                             color: theme.colorScheme.surfaceContainerHighest
                                 .withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: context.shapes.borderRadius(8),
                             border: Border(
                               left: BorderSide(
                                 color: theme.colorScheme.primary,
@@ -3246,7 +3256,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                               Icon(
                                 Icons.reply,
                                 size: 14,
-                                color: theme.colorScheme.primary,
+                                color: UiEmphasis.of(theme).accent,
                               ),
                               const SizedBox(width: 4),
                               Flexible(
@@ -3318,14 +3328,16 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                           color: isOwnMessage
                               ? theme.colorScheme.primaryContainer
                               : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16).copyWith(
-                            bottomLeft: isOwnMessage
-                                ? const Radius.circular(16)
-                                : const Radius.circular(4),
-                            bottomRight: isOwnMessage
-                                ? const Radius.circular(4)
-                                : const Radius.circular(16),
-                          ),
+                          borderRadius: context.shapes
+                              .borderRadius(16)
+                              .copyWith(
+                                bottomLeft: isOwnMessage
+                                    ? context.shapes.radius(16)
+                                    : context.shapes.radius(4),
+                                bottomRight: isOwnMessage
+                                    ? context.shapes.radius(4)
+                                    : context.shapes.radius(16),
+                              ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3353,7 +3365,8 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                         );
                                       },
                                       child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: context.shapes
+                                            .borderRadius(8),
                                         child: CachedImage(
                                           url: url,
                                           width: 180,
@@ -3374,7 +3387,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                   color: theme.colorScheme.surface.withValues(
                                     alpha: 0.55,
                                   ),
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: context.shapes.borderRadius(10),
                                   clipBehavior: Clip.antiAlias,
                                   child: InkWell(
                                     onTap: isMultiSelectMode
@@ -3567,7 +3580,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                 onTap: () => onToggleReaction(r.emoji),
                                 onLongPress: () =>
                                     _showChatReactionUsers(context, r),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: context.shapes.borderRadius(12),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 6,
@@ -3584,7 +3597,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                                 .withValues(alpha: 0.5),
                                       width: 1,
                                     ),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: context.shapes.borderRadius(
+                                      12,
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -3731,7 +3746,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  InteractionPageRoute(
                     builder: (_) => UserProfilePage(username: user.username),
                   ),
                 );
@@ -3805,7 +3820,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.5,
                 ),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: context.shapes.borderRadius(12),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -4099,7 +4114,7 @@ class _PinnedMessagesSheet extends ConsumerWidget {
                 color: theme.colorScheme.onSurfaceVariant.withValues(
                   alpha: 0.4,
                 ),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: context.shapes.borderRadius(2),
               ),
             ),
           ),
@@ -4110,7 +4125,7 @@ class _PinnedMessagesSheet extends ConsumerWidget {
                 Icon(
                   Icons.push_pin_rounded,
                   size: 20,
-                  color: theme.colorScheme.primary,
+                  color: UiEmphasis.of(theme).selected,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -4170,7 +4185,7 @@ class _PinnedMessagesSheet extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: InkWell(
                         onTap: () => onMessageTap(msg),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: context.shapes.borderRadius(8),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

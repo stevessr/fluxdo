@@ -32,7 +32,9 @@ import 'widgets/common/app_glass_settings.dart';
 import 'widgets/user/account_switcher_sheet.dart';
 
 import 'package:common_ui/common_ui.dart';
+
 import 'services/display_refresh_service.dart';
+
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'services/network/cookie/csrf_token_service.dart';
@@ -47,8 +49,6 @@ import 'services/data_management/cache_size_service.dart';
 import 'services/discourse_cache_manager.dart';
 import 'services/render_backend_service.dart';
 import 'services/toast_service.dart';
-
-import 'package:m3e_ui/m3e_ui.dart';
 
 import 'l10n/s.dart';
 
@@ -74,7 +74,12 @@ import 'widgets/festival_greeting.dart';
 import 'services/update_checker_helper.dart';
 
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show AiContentBadge, FlattenCache, ParagraphLayoutCache, FluxdoRenderShapes, SpoilerShader;
+    show
+        AiContentBadge,
+        FlattenCache,
+        ParagraphLayoutCache,
+        FluxdoRenderShapes,
+        SpoilerShader;
 
 import 'services/clipboard_topic_link_service.dart';
 import 'pages/webview_page.dart';
@@ -171,7 +176,9 @@ Future<bool> _initRhttp() async {
 /// 失败不阻塞启动。
 Future<void> _applyAndroidDisplayMode(SharedPreferences prefs) =>
     DisplayRefreshService.instance.apply(
-      DisplayRefreshService.normalize(prefs.getInt('pref_display_mode_refresh_rate')),
+      DisplayRefreshService.normalize(
+        prefs.getInt('pref_display_mode_refresh_rate'),
+      ),
     );
 
 // Android 新版嵌入层通过 FlutterEngineGroup 按根库函数名启动子引擎，
@@ -399,16 +406,17 @@ Future<void> main() async {
     CoreFallbackService.instance.initialize(prefs),
     ProxySettingsService.instance.initialize(prefs),
     if (Platform.isAndroid)
-      const MethodChannel(
-        'com.github.lingyan000.fluxdo/crashlytics',
-      ).invokeMethod<void>('setCrashlyticsEnabled', {
-        'enabled': crashlyticsEnabled,
-      }).then<void>((_) {
-        crashContextEnabled = crashlyticsEnabled;
-      }).catchError((Object error) {
-        // 崩溃上报不可用时仍要绘制首屏。
-        debugPrint('[Main] Crashlytics 初始化失败: $error');
-      }),
+      const MethodChannel('com.github.lingyan000.fluxdo/crashlytics')
+          .invokeMethod<void>('setCrashlyticsEnabled', {
+            'enabled': crashlyticsEnabled,
+          })
+          .then<void>((_) {
+            crashContextEnabled = crashlyticsEnabled;
+          })
+          .catchError((Object error) {
+            // 崩溃上报不可用时仍要绘制首屏。
+            debugPrint('[Main] Crashlytics 初始化失败: $error');
+          }),
   ]);
   // 跟随同一开关:关闭时导航上下文也不再上报
   CrashContextReporter.setEnabled(crashContextEnabled);
@@ -539,11 +547,6 @@ Future<void> main() async {
     }
   });
 
-  // 注入自定义加载指示器
-  AiToastDelegate.configureLoading(({color, size = 48}) {
-    return LoadingSpinner(color: color, size: size);
-  });
-
   // 根据当前语言配置 AI 模型管理包的语言
   final savedLocale = prefs.getString('pref_locale');
   if (savedLocale != null && savedLocale != 'system') {
@@ -612,6 +615,8 @@ Future<void> main() async {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         aiSharedPreferencesProvider.overrideWithValue(prefs),
+        aiDialogPresenterProvider.overrideWithValue(showAppDialog),
+        aiBottomSheetPresenterProvider.overrideWithValue(showAppBottomSheet),
         aiDioAdapterFactoryProvider.overrideWithValue(
           createExternalHttpAdapter,
         ),
@@ -976,9 +981,7 @@ class MainApp extends ConsumerWidget {
                   }
                 }
 
-                // 第三方组件迁移期间同步旧 Material 的主题和本地化。
-                // ignore: deprecated_member_use
-                return MaterialUiCompatibilityBridge(
+                return AppThemeBridge(
                   child: AppGlassSettings(
                     // 玻璃的背景统一在这里每帧截取一次，包住导航与弹层
                     child: Builder(
@@ -1332,7 +1335,7 @@ class _MainPageState extends ConsumerState<MainPage>
     final request = await PicoVrService.instance.consumeLaunchRequest();
     if (!mounted || request == null) return;
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute<void>(
+      InteractionPageRoute<void>(
         builder: (_) => TopicDetailPage(
           topicId: request.topicId,
           scrollToPostNumber: request.postNumber,
@@ -1861,8 +1864,9 @@ class _MainPageState extends ConsumerState<MainPage>
     final topicState = ref.watch(selectedTopicProvider);
     final topicParallelStacked = topicState.isStacked && !topicState.tabMode;
     final messageParallelStacked = ref.watch(selectedMessageProvider).isStacked;
-    final followingFeedParallelStacked =
-        ref.watch(selectedFollowingFeedProvider).isStacked;
+    final followingFeedParallelStacked = ref
+        .watch(selectedFollowingFeedProvider)
+        .isStacked;
     final hideNavigationRail =
         (activeEntryId == NavEntryIds.home && topicParallelStacked) ||
         (activeEntryId == NavEntryIds.messages && messageParallelStacked) ||

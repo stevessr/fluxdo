@@ -38,7 +38,11 @@ class CfChallengeClassifier {
     String? contentType,
     Object? body,
   }) {
-    if ((cfMitigated ?? '').toLowerCase().contains('challenge')) return true;
+    if ((cfMitigated ?? '').split(',').any(
+      (value) => value.trim().toLowerCase() == 'challenge',
+    )) {
+      return true;
+    }
     if (!challengeStatusCodes.contains(statusCode)) return false;
     final type = (contentType ?? '').toLowerCase();
     if (type.isNotEmpty && !type.contains('text/html')) return false;
@@ -51,7 +55,7 @@ class CfChallengeClassifier {
     final headers = response.headers;
     return isChallenge(
       statusCode: response.statusCode,
-      cfMitigated: headers.value('cf-mitigated'),
+      cfMitigated: headers['cf-mitigated']?.join(','),
       contentType: headers.value('content-type'),
       body: response.data,
     );

@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiEmphasisContext;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -391,7 +392,7 @@ class _RadialAccountQuickSwitcherOverlayState
         if (hostContext.mounted) {
           unawaited(
             Navigator.of(hostContext).push(
-              MaterialPageRoute(builder: (_) => const AccountManagePage()),
+              InteractionPageRoute(builder: (_) => const AccountManagePage()),
             ),
           );
         }
@@ -517,7 +518,7 @@ class _RadialAccountQuickSwitcherOverlayState
         child: Center(
           child: current != null
               ? _RadialAccountAvatar(account: current, radius: 23)
-              : Icon(Symbols.person_rounded, size: 28, color: scheme.primary),
+              : Icon(Symbols.person_rounded, size: 28, color: context.emphasis.accent),
         ),
       ),
     );
@@ -538,7 +539,7 @@ class _RadialAccountQuickSwitcherOverlayState
         ? Icon(
             Symbols.manage_accounts_rounded,
             size: (nodeSize * 0.5).clamp(20.0, 25.0).toDouble(),
-            color: hovered ? scheme.onPrimaryContainer : scheme.primary,
+            color: hovered ? scheme.onPrimaryContainer : context.emphasis.accent,
           )
         : _RadialAccountAvatar(
             account: target.account!,

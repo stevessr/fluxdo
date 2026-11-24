@@ -74,7 +74,7 @@ class _PostDeviceSourceBadge extends StatelessWidget {
             color: theme.colorScheme.surfaceContainerHighest.withValues(
               alpha: 0.65,
             ),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: context.shapes.borderRadius(8),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

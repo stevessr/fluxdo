@@ -1,6 +1,8 @@
+import 'package:common_ui/common_ui.dart'
+    show UiShapesContext, InteractionPageRoute;
 import 'package:app_icons/app_icons.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../services/network/discourse_dio.dart';
 import '../utils/time_utils.dart';
@@ -135,7 +137,7 @@ class _UserInvitesPageState extends State<UserInvitesPage>
             icon: const Icon(Symbols.person_add_rounded),
             onPressed: () => Navigator.of(
               context,
-            ).push(MaterialPageRoute(builder: (_) => const InviteLinksPage())),
+            ).push(InteractionPageRoute(builder: (_) => const InviteLinksPage())),
           ),
         ],
         bottom: TabBar(
@@ -317,7 +319,7 @@ class _InviteCard extends StatelessWidget {
                   height: 40,
                   decoration: BoxDecoration(
                     color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: context.shapes.borderRadius(12),
                   ),
                   child: Icon(
                     filter.icon,
@@ -399,7 +401,7 @@ class _InfoChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: context.shapes.borderRadius(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -834,8 +834,8 @@ class _ToastViewState extends State<_ToastView> with TickerProviderStateMixin {
                               color: toFg.withValues(alpha: 0.22),
                             ),
                           ),
-                          borderRadius: const BorderRadius.horizontal(
-                            right: Radius.circular(20),
+                          borderRadius: BorderRadius.horizontal(
+                            right: context.shapes.radius(20),
                           ),
                         ),
                         alignment: Alignment.center,

@@ -810,8 +810,9 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           glassEffectLevel: GlassEffectLevel.fromStorage(
             _prefs.getString(_glassEffectLevelKey),
           ),
-          displayModeRefreshRate:
-              DisplayRefreshService.normalize(_prefs.getInt(_displayModeRefreshRateKey)),
+          displayModeRefreshRate: DisplayRefreshService.normalize(
+            _prefs.getInt(_displayModeRefreshRateKey),
+          ),
           progressGesturesEnabled:
               _prefs.getBool(_progressGesturesEnabledKey) ?? true,
           progressGestureSwipeUp: _readGestureAction(

@@ -124,7 +124,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         // 避免在应用中先显示一个只有单项的冗余对话框。
         selected = browsers.single;
       } else {
-        selected = await showModalBottomSheet<LoginBrowser>(
+        selected = await showInteractionBottomSheet<LoginBrowser>(
           context: context,
           showDragHandle: true,
           isScrollControlled: true,

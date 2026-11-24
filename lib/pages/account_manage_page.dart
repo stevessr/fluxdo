@@ -1,3 +1,10 @@
+import 'package:common_ui/common_ui.dart'
+    show
+        UiShapesContext,
+        UiEmphasis,
+        InteractionPageRoute,
+        showInteractionDialog;
+
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -51,7 +58,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
 
   Future<void> _switchTo(SavedAccount account) async {
     final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showInteractionDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.accountManage_switchConfirmTitle),
@@ -76,7 +83,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
 
     // 切换涉及会话恢复和全量缓存刷新，统一展示目标账号身份与进度。
     unawaited(
-      showDialog(
+      showInteractionDialog(
         context: context,
         barrierDismissible: false,
         barrierColor: Theme.of(context).colorScheme.scrim
@@ -117,7 +124,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
 
   Future<void> _removeAccount(SavedAccount account) async {
     final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showInteractionDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.accountManage_removeConfirmTitle),
@@ -160,7 +167,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
     var success = false;
     try {
       final result = await Navigator.of(context)
-          .push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
+          .push<bool>(InteractionPageRoute(builder: (_) => const LoginPage()));
       success = result == true;
     } finally {
       await _manager.completeNewLogin(success: success);
@@ -220,11 +227,11 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
                                 color: theme.colorScheme.primary.withValues(
                                   alpha: 0.1,
                                 ),
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: context.shapes.borderRadius(10),
                               ),
                               child: Icon(
                                 Symbols.person_add_rounded,
-                                color: theme.colorScheme.primary,
+                                color: UiEmphasis.of(theme).accent,
                                 size: 20,
                               ),
                             ),
@@ -294,7 +301,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: context.shapes.borderRadius(999),
                 ),
                 child: Text(
                   l10n.accountManage_currentChip,

@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute, UiEmphasis;
 
 import '../services/discourse/discourse_service.dart';
 import '../services/preloaded_data_service.dart';
@@ -310,7 +311,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
 
   Future<void> _openConversation(AiBotConversation item) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      InteractionPageRoute<void>(
         builder: (_) =>
             TopicDetailPage(topicId: item.id, initialTitle: item.title),
       ),
@@ -425,7 +426,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.smart_toy_rounded, color: theme.colorScheme.primary),
+                Icon(Icons.smart_toy_rounded, color: UiEmphasis.of(theme).accent),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -449,7 +450,15 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
                 filled: true,
                 fillColor: theme.colorScheme.surface,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: context.shapes.borderRadius(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(16),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -602,7 +611,7 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
                 )
               : Icon(
                   item.starred ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: item.starred ? theme.colorScheme.primary : null,
+                  color: item.starred ? UiEmphasis.of(theme).selected : null,
                 ),
         ),
       ),

@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute, UiEmphasis;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -386,8 +387,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => ChatMessageFlagSheet(
         channelId: widget.channelId,
@@ -580,7 +581,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: context.shapes.borderRadius(8),
           child: upload.path.toLowerCase().endsWith('.svg')
               ? Container(
                   width: 64,
@@ -637,8 +638,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     showAppBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SizedBox(
         height: MediaQuery.of(ctx).size.height * 0.45,
@@ -660,8 +661,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     if (message.deleted) {
       showAppBottomSheet(
         context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
         ),
         builder: (ctx) => SafeArea(
           child: Column(
@@ -694,8 +695,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
 
     showAppBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
@@ -732,7 +733,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                                       _saveRecentReactionEmoji(emoji);
                                       _toggleReaction(message, emoji);
                                     },
-                                    borderRadius: BorderRadius.circular(24),
+                                    borderRadius: context.shapes.borderRadius(24),
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
@@ -760,15 +761,15 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               Navigator.pop(ctx);
                               _showFullEmojiPickerForReaction(message);
                             },
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: context.shapes.borderRadius(24),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: Theme.of(ctx)
                                     .colorScheme
                                     .primaryContainer
                                     .withValues(alpha: 0.7),
-                                shape: BoxShape.circle,
+                                shape: context.shapes.circle(),
                               ),
                               child: Icon(
                                 Icons.add_rounded,
@@ -960,7 +961,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
               Icon(
                 Icons.forum_outlined,
                 size: 16,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).accent,
               ),
               const SizedBox(width: 6),
               Text(
@@ -1076,7 +1077,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                         Icon(
                           isEditing ? Icons.edit_outlined : Icons.reply_rounded,
                           size: 18,
-                          color: theme.colorScheme.primary,
+                          color: UiEmphasis.of(theme).accent,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -1201,7 +1202,15 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                             decoration: InputDecoration(
                               hintText: composerHint,
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
                                 borderSide: BorderSide.none,
                               ),
                               filled: true,
@@ -1452,7 +1461,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                       Icon(
                         Icons.push_pin_outlined,
                         size: 12,
-                        color: theme.colorScheme.primary,
+                        color: UiEmphasis.of(theme).selected,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -1476,7 +1485,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            InteractionPageRoute(
                               builder: (_) => UserProfilePage(
                                 username: message.user!.username,
                               ),
@@ -1519,13 +1528,13 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                             color: isOwnMessage
                                 ? theme.colorScheme.primaryContainer
                                 : theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(16).copyWith(
+                            borderRadius: context.shapes.borderRadius(16).copyWith(
                               bottomLeft: isOwnMessage
-                                  ? const Radius.circular(16)
-                                  : const Radius.circular(4),
+                                  ? context.shapes.radius(16)
+                                  : context.shapes.radius(4),
                               bottomRight: isOwnMessage
-                                  ? const Radius.circular(4)
-                                  : const Radius.circular(16),
+                                  ? context.shapes.radius(4)
+                                  : context.shapes.radius(16),
                             ),
                             border: isOriginal
                                 ? Border.all(
@@ -1639,7 +1648,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                                   color: Colors.transparent,
                                   child: InkWell(
                                     onTap: () => onToggleReaction(r.emoji),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: context.shapes.borderRadius(12),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 6,
@@ -1655,7 +1664,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                                               : theme.colorScheme.outlineVariant
                                                     .withValues(alpha: 0.5),
                                         ),
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: context.shapes.borderRadius(12),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,

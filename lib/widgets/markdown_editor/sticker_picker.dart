@@ -19,7 +19,8 @@ import '../common/error_view.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
 import 'sticker_market_sheet.dart';
-import '../../../../../l10n/s.dart';
+import 'sticker_search_view.dart';
+import '../../l10n/s.dart';
 
 /// 表情包选择器
 ///
@@ -33,6 +34,7 @@ class StickerPicker extends ConsumerStatefulWidget {
 
   /// 紧凑模式(桌面悬浮弹层):顶部圆角交给弹层壳,分类栏收紧
   final bool compact;
+  final bool inlineSearch;
 
   /// 请求宿主收起面板(桌面悬浮弹层场景:打开表情包市场 sheet 前调用,
   /// sheet 走 Navigator 路由层,会被 root overlay 的弹层压住)
@@ -43,6 +45,7 @@ class StickerPicker extends ConsumerStatefulWidget {
     required this.onStickerSelected,
     this.bottomPadding = 0,
     this.compact = false,
+    this.inlineSearch = false,
     this.onDismissRequested,
   });
 
@@ -68,6 +71,7 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
   bool _isProgrammaticScroll = false;
   bool _scrollThrottled = false;
   bool _marketOpen = false;
+  bool _searching = false;
 
   // ==================== 长按预览 ====================
   OverlayEntry? _previewEntry;
@@ -147,6 +151,49 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
   void _onStickerTap(StickerItem sticker) {
     ref.read(recentStickersProvider.notifier).add(sticker);
     widget.onStickerSelected(sticker.toMarkdown());
+  }
+
+  List<StickerSearchSection> _search(String raw) {
+    final query = raw.trim().toLowerCase();
+    if (query.isEmpty) return const [];
+    final seen = <String>{};
+    final sections = <StickerSearchSection>[];
+    void add(String title, List<StickerItem> items) {
+      final matchGroup = title.toLowerCase().contains(query);
+      final matches = items.where((item) {
+        final match = matchGroup ||
+            StickerSearchView.plainName(item.name).toLowerCase().contains(query);
+        return match && seen.add(item.url);
+      }).toList(growable: false);
+      if (matches.isNotEmpty) sections.add(StickerSearchSection(title, matches));
+    }
+    add(S.current.common_recentlyUsed, ref.read(recentStickersProvider));
+    final groups = ref.read(stickerGroupsProvider).value ?? const <StickerGroup>[];
+    for (final group in _filterSubscribed(groups, ref.read(subscribedStickerIdsProvider))) {
+      final items = ref.read(stickerGroupDetailProvider(group.id)).value?.emojis;
+      if (items != null) add(group.name, items);
+    }
+    return sections;
+  }
+
+  Future<void> _openSearch() async {
+    if (widget.inlineSearch || widget.compact) {
+      setState(() => _searching = true);
+      return;
+    }
+    if (_marketOpen) return;
+    setState(() => _marketOpen = true);
+    stickerPanelClosed();
+    StickerThumbnailProvider.cancelInflight();
+    try {
+      final selected = await StickerSearchView.showSheet(context, search: _search);
+      if (mounted && selected != null) _onStickerTap(selected);
+    } finally {
+      if (mounted) {
+        stickerPanelOpened();
+        setState(() => _marketOpen = false);
+      }
+    }
   }
 
   // ==================== 滚动锚点 ====================
@@ -270,6 +317,14 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
     _recentSnapshot ??= ref.read(recentStickersProvider);
     final recentStickers = _recentSnapshot!;
     final groupsAsync = ref.watch(stickerGroupsProvider);
+    if (_searching) {
+      return StickerSearchView(
+        search: _search,
+        onSelected: _onStickerTap,
+        onClose: () => setState(() => _searching = false),
+        bottomPadding: widget.bottomPadding,
+      );
+    }
 
     return ClipRect(
       child: Container(
@@ -282,7 +337,11 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
           ),
         ),
         child: (() {
-          if (subscribedIds.isEmpty) return _buildEmptyState();
+          if (subscribedIds.isEmpty) {
+            return recentStickers.isEmpty
+                ? _buildEmptyState()
+                : _buildContent(const [], recentStickers);
+          }
           final allGroups = groupsAsync.value;
           if (allGroups != null) {
             return _buildContent(
@@ -406,7 +465,7 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
     List<StickerGroup> groups,
     List<StickerItem> recentStickers,
   ) {
-    if (groups.isEmpty) return _buildEmptyState();
+    if (groups.isEmpty && recentStickers.isEmpty) return _buildEmptyState();
 
     // 预加载所有已订阅分组的详情，避免滚动时逐个 loading
     for (final group in groups) {
@@ -455,6 +514,11 @@ class _StickerPickerState extends ConsumerState<StickerPicker>
     return RepaintBoundary(
       child: Row(
         children: [
+          IconButton(
+            icon: const Icon(Symbols.search_rounded, size: 20),
+            tooltip: S.current.sticker_searchTooltip,
+            onPressed: _openSearch,
+          ),
           Expanded(
             child: SizedBox(
               height: barHeight,

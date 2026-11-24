@@ -587,7 +587,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       return;
     }
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('删除邀请'),
@@ -640,7 +640,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   Future<void> _resendAllInvites() async {
     if (_isManagingInvite) return;
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('重新发送全部邀请'),
@@ -679,50 +679,51 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       text: details?.description ?? '',
     );
     final emailController = TextEditingController(text: details?.email ?? '');
-    final result = await showDialog<({String description, String email})>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('编辑邀请'),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: descriptionController,
-                maxLength: 100,
-                decoration: const InputDecoration(
-                  labelText: '描述',
-                  border: OutlineInputBorder(),
-                ),
+    final result =
+        await showInteractionDialog<({String description, String email})>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('编辑邀请'),
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: descriptionController,
+                    maxLength: 100,
+                    decoration: const InputDecoration(
+                      labelText: '描述',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: '限定邮箱（留空则取消邮箱限定）',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: '限定邮箱（留空则取消邮箱限定）',
-                  border: OutlineInputBorder(),
-                ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, (
+                  description: descriptionController.text.trim(),
+                  email: emailController.text.trim(),
+                )),
+                child: const Text('保存'),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, (
-              description: descriptionController.text.trim(),
-              email: emailController.text.trim(),
-            )),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
+        );
     descriptionController.dispose();
     emailController.dispose();
     if (result == null || !mounted) return;
@@ -753,63 +754,64 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     if (_isManagingInvite) return;
     final emailsController = TextEditingController();
     final messageController = TextEditingController();
-    final result = await showDialog<({List<String> emails, String message})>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('批量邮件邀请'),
-        content: SizedBox(
-          width: 480,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailsController,
-                autofocus: true,
-                minLines: 4,
-                maxLines: 8,
-                decoration: const InputDecoration(
-                  labelText: '邮箱地址',
-                  hintText: '每行一个，也可用逗号、分号或空格分隔',
-                  border: OutlineInputBorder(),
-                ),
+    final result =
+        await showInteractionDialog<({List<String> emails, String message})>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('批量邮件邀请'),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: emailsController,
+                    autofocus: true,
+                    minLines: 4,
+                    maxLines: 8,
+                    decoration: const InputDecoration(
+                      labelText: '邮箱地址',
+                      hintText: '每行一个，也可用逗号、分号或空格分隔',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: messageController,
+                    minLines: 2,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: '自定义消息（可选）',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: messageController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: '自定义消息（可选）',
-                  border: OutlineInputBorder(),
-                ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final emails = emailsController.text
+                      .split(RegExp(r'[\s,;，；]+'))
+                      .map((item) => item.trim())
+                      .where((item) => item.isNotEmpty)
+                      .toSet()
+                      .toList(growable: false);
+                  if (emails.isEmpty) return;
+                  Navigator.pop(dialogContext, (
+                    emails: emails,
+                    message: messageController.text.trim(),
+                  ));
+                },
+                child: const Text('发送邀请'),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final emails = emailsController.text
-                  .split(RegExp(r'[\s,;，；]+'))
-                  .map((item) => item.trim())
-                  .where((item) => item.isNotEmpty)
-                  .toSet()
-                  .toList(growable: false);
-              if (emails.isEmpty) return;
-              Navigator.pop(dialogContext, (
-                emails: emails,
-                message: messageController.text.trim(),
-              ));
-            },
-            child: const Text('发送邀请'),
-          ),
-        ],
-      ),
-    );
+        );
     emailsController.dispose();
     messageController.dispose();
     if (result == null || !mounted) return;
@@ -895,7 +897,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                       child: ListTile(
                         leading: Icon(
                           Icons.mark_email_read_outlined,
-                          color: theme.colorScheme.primary,
+                          color: UiEmphasis.of(theme).selected,
                         ),
                         title: Text(_InviteFormStrings.of(context).emailSent),
                         subtitle: Text(_lastEmailRecipient!),

@@ -1,4 +1,6 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart'
+    show UiShapesContext, InteractionPageRoute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
@@ -43,8 +45,8 @@ class ChatChannelMembersSheet extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (_) => ChatChannelMembersSheet(
         channelId: channelId,
@@ -140,7 +142,7 @@ class _ChatChannelMembersSheetState
   void _navigateToUserProfile(String username) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => UserProfilePage(username: username)),
+      InteractionPageRoute(builder: (_) => UserProfilePage(username: username)),
     );
   }
 
@@ -170,7 +172,7 @@ class _ChatChannelMembersSheetState
                       color: theme.colorScheme.onSurfaceVariant.withValues(
                         alpha: 0.4,
                       ),
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: context.shapes.borderRadius(2),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -258,7 +260,15 @@ class _ChatChannelMembersSheetState
                   filled: true,
                   fillColor: theme.colorScheme.surfaceContainerHighest,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: context.shapes.borderRadius(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: context.shapes.borderRadius(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: context.shapes.borderRadius(12),
                     borderSide: BorderSide.none,
                   ),
                   contentPadding: const EdgeInsets.symmetric(
@@ -578,7 +588,9 @@ class _AddChannelMemberDialogState
     final theme = Theme.of(context);
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: context.shapes.borderRadius(16),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400, maxHeight: 480),
         child: Column(
@@ -619,7 +631,7 @@ class _AddChannelMemberDialogState
                         ),
                         isDense: true,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: context.shapes.borderRadius(10),
                         ),
                       ),
                       onSubmitted: (val) => _searchUsers(val),

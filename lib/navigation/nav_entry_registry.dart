@@ -217,9 +217,7 @@ class NavEntryRegistry {
   static String canonicalId(String id) {
     if (id == 'seeking') return NavEntryIds.followingFeed;
     if (id == 'birthdays') return 'anniversaries';
-    if (id == 'site_guidelines' ||
-        id == 'site_terms' ||
-        id == 'site_privacy') {
+    if (id == 'site_guidelines' || id == 'site_terms' || id == 'site_privacy') {
       return 'site_about';
     }
     return id;

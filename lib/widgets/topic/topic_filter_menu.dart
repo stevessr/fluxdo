@@ -144,7 +144,7 @@ class _TopicFilterMenuButtonState extends ConsumerState<TopicFilterMenuButton> {
           widget.onSelectTags?.call();
         } else if (value == _bookmarksValue) {
           Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => const BookmarksPage()));
+              .push(InteractionPageRoute(builder: (_) => const BookmarksPage()));
         }
       },
       offset: const Offset(0, 36),

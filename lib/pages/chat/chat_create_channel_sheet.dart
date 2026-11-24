@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,8 +23,8 @@ class ChatCreateChannelSheet {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (_) => const _ChatCreateChannelBody(),
     );
@@ -71,8 +72,8 @@ class _ChatCreateChannelBodyState
     await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (sheetCtx) => SizedBox(
         height: MediaQuery.of(sheetCtx).size.height * 0.45,
@@ -121,7 +122,7 @@ class _ChatCreateChannelBodyState
       Navigator.of(context).pop();
       Navigator.push(
         context,
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) => ChatMessagePage(
             channelId: channel.id,
             channelTitle: channel.title ?? _nameController.text.trim(),
@@ -161,7 +162,7 @@ class _ChatCreateChannelBodyState
                     height: 40,
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: context.shapes.borderRadius(12),
                     ),
                     child: Icon(
                       Icons.tag_rounded,
@@ -293,9 +294,9 @@ class _ChatCreateChannelBodyState
                   const SizedBox(width: 12),
                   Material(
                     color: theme.colorScheme.primaryContainer,
-                    shape: const CircleBorder(),
+                    shape: context.shapes.circle(),
                     child: InkWell(
-                      customBorder: const CircleBorder(),
+                      customBorder: context.shapes.circle(),
                       onTap: _pickEmoji,
                       child: SizedBox(
                         width: 48,

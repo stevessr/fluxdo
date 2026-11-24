@@ -217,6 +217,27 @@ class NotificationChannelNotifier extends Notifier<void> {
           }
         }
 
+        // Full history is independent of the recent panel. Update only
+        // mounted history providers and reconcile count-only events quietly.
+        for (final filter in NotificationReadFilter.values) {
+          final provider = notificationListProvider(filter);
+          if (!ref.read(provider.exists)) continue;
+          final history = ref.read(provider);
+          final notifier = ref.read(provider.notifier);
+          final loadedIds = history.value?.map((n) => n.id).toSet() ?? <int>{};
+          notifier.applyRealtimeUpdate(
+            latest: newNotification,
+            readStatuses: readStatusMap,
+          );
+          if (newNotification == null ||
+              history.isLoading ||
+              readStatusMap.keys.any(
+                (id) => !loadedIds.contains(id) && id != newNotification?.id,
+              )) {
+            notifier.scheduleRealtimeSync();
+          }
+        }
+
         // 仅在通知列表已加载（面板已打开过）时做增量更新，
         // 避免 ref.read() 意外触发 build() 发起 API 请求
         if (ref.read(recentNotificationsProvider.exists)) {

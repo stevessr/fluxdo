@@ -1,3 +1,5 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -31,8 +33,8 @@ class ChatChannelSettingsSheet extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (_) => ChatChannelSettingsSheet(
         channelId: channelId,
@@ -137,8 +139,8 @@ class _ChatChannelSettingsSheetState
         _localNotificationLevel ?? channel.notificationLevel ?? 'mention';
     showAppBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) {
         return SafeArea(
@@ -237,8 +239,10 @@ class _ChatChannelSettingsSheetState
               showAppBottomSheet<void>(
                 context: ctx,
                 isScrollControlled: true,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(
+                    top: context.shapes.radius(16),
+                  ),
                 ),
                 builder: (sheetCtx) => SizedBox(
                   height: MediaQuery.of(sheetCtx).size.height * 0.45,
@@ -294,9 +298,9 @@ class _ChatChannelSettingsSheetState
                       children: [
                         Material(
                           color: Theme.of(ctx).colorScheme.primaryContainer,
-                          shape: const CircleBorder(),
+                          shape: context.shapes.circle(),
                           child: InkWell(
-                            customBorder: const CircleBorder(),
+                            customBorder: context.shapes.circle(),
                             onTap: openEmojiPicker,
                             child: SizedBox(
                               width: 56,
@@ -537,7 +541,7 @@ class _ChatChannelSettingsSheetState
                     color: theme.colorScheme.onSurfaceVariant.withValues(
                       alpha: 0.4,
                     ),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: context.shapes.borderRadius(2),
                   ),
                 ),
               ),

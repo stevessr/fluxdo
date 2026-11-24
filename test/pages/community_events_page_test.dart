@@ -40,27 +40,31 @@ void main() {
     final requests = <RequestOptions>[];
     final dio = _client((options, handler) {
       requests.add(options);
-      handler.resolve(Response<dynamic>(
-        requestOptions: options,
-        statusCode: 200,
-        data: {
-          'events': [
-            {
-              'id': 27,
-              'name': '测试活动',
-              'starts_at': '2026-11-10',
-              'all_day': true,
-            },
-          ],
-        },
-      ));
+      handler.resolve(
+        Response<dynamic>(
+          requestOptions: options,
+          statusCode: 200,
+          data: {
+            'events': [
+              {
+                'id': 27,
+                'name': '测试活动',
+                'starts_at': '2026-11-10',
+                'all_day': true,
+              },
+            ],
+          },
+        ),
+      );
     });
-    await tester.pumpWidget(MaterialApp(
-      home: CommunityEventsPage(
-        view: CommunityEventsView.upcoming,
-        client: dio,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CommunityEventsPage(
+          view: CommunityEventsView.upcoming,
+          client: dio,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     expect(find.text('All events'), findsOneWidget);
     expect(find.text('My events'), findsOneWidget);

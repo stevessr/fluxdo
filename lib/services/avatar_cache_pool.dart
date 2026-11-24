@@ -140,6 +140,8 @@ class AvatarCachePool {
     if (bytes == null || bytes.isEmpty || !SvgUtils.isSvgBytes(bytes)) {
       return null;
     }
-    return SvgUtils.sanitize(SvgUtils.decodeSvgBytes(bytes));
+    return SvgUtils.sanitize(
+      SvgUtils.stripActiveContent(SvgUtils.decodeSvgBytes(bytes)),
+    );
   }
 }
