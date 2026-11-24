@@ -1,5 +1,5 @@
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../services/network/cookie/site_cookie_manager_service.dart';
 

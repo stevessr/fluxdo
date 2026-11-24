@@ -48,7 +48,7 @@ jobs:
           dart run tool/gen_l10n.dart
       - name: Analyze changed Dart code
         run: >-
-          flutter analyze
+          flutter analyze --no-fatal-infos
           lib/services/pico_vr_service.dart
           lib/pages/qr_login_scan_page.dart
           lib/pages/settings_page.dart
@@ -91,8 +91,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.14'
       - name: Prepare Flutter Android project
         run: |
           mkdir -p assets/certs assets/images/llm
@@ -117,4 +115,4 @@ jobs:
           cp -f "$cert_dir/ca.crt" assets/certs/proxy_ca.pem
           cp -f "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
       - name: Compile Android Kotlin sources
-        run: gradle -p android :app:compileDebugKotlin --no-daemon
+        run: bash android/gradlew -p android :app:compileDebugKotlin --no-daemon

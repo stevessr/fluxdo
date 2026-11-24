@@ -1516,9 +1516,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 controller: _searchController,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  hintText: '搜索此对话中的消息',
-                ).withoutBorder(),
+                decoration: const InputDecoration(hintText: '搜索此对话中的消息')
+                    .withoutBorder(),
                 onSubmitted: _runChannelSearch,
               ),
               actions: [

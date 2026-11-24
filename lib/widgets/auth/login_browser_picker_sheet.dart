@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 
 import '../../services/system_browser_service.dart';

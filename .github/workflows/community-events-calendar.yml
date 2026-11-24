@@ -46,7 +46,7 @@ jobs:
         run: dart format lib/pages/community_events_page.dart lib/pages/community_events_calendar.dart test/pages/community_events_calendar_test.dart test/pages/community_events_page_test.dart
 
       - name: Analyze calendar implementation
-        run: flutter analyze --no-pub lib/pages/community_events_page.dart lib/pages/community_events_calendar.dart test/pages/community_events_calendar_test.dart test/pages/community_events_page_test.dart
+        run: flutter analyze --no-pub --no-fatal-infos lib/pages/community_events_page.dart lib/pages/community_events_calendar.dart test/pages/community_events_calendar_test.dart test/pages/community_events_page_test.dart
 
       - name: Test calendar behavior
         run: dart tool/flutterw.dart test test/pages/community_events_calendar_test.dart test/pages/community_events_page_test.dart

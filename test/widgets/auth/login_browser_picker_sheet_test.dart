@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/services/system_browser_service.dart';
 import 'package:fluxdo/widgets/auth/login_browser_picker_sheet.dart';
