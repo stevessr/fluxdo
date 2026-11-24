@@ -348,11 +348,78 @@ List<SettingsGroup> buildAppearanceSearchGroups(BuildContext context) {
       ],
     ),
 
-    // ── 表情风格 ──────────────────────────────────────────────────
+    // ── Emoji 类型与风格 ───────────────────────────────────────────
     SettingsGroup(
-      title: l10n.appearance_emojiStyle,
+      title: 'Emoji',
       icon: Symbols.add_reaction_rounded,
       items: [
+        CustomModel(
+          id: 'emojiRenderStyle',
+          title: l10n.appearance_emojiType,
+          subtitle: l10n.appearance_emojiTypeDesc,
+          builder: (context, ref) {
+            final selected = ref.watch(
+              preferencesProvider.select((p) => p.emojiRenderStyle),
+            );
+            final locale = Localizations.localeOf(context);
+            final isZh = locale.languageCode == 'zh';
+            final traditional = isZh &&
+                const ['HK', 'MO', 'TW'].contains(locale.countryCode);
+            String localized(String zh, String tw, String en) =>
+                isZh ? (traditional ? tw : zh) : en;
+            String label(EmojiRenderStyle style) => switch (style) {
+              EmojiRenderStyle.normal => localized('常规', '一般', 'Normal'),
+              EmojiRenderStyle.animated => localized('动态', '動態', 'Animated'),
+              EmojiRenderStyle.threeD => '3D',
+            };
+            String description(EmojiRenderStyle style) => switch (style) {
+              EmojiRenderStyle.normal => localized(
+                  '使用所选表情风格', '使用所選表情風格', 'Use selected emoji artwork'),
+              EmojiRenderStyle.animated => localized(
+                  'Google Noto 动态表情，缺失资源回退常规',
+                  'Google Noto 動態表情，缺失資源回退一般',
+                  'Animated Google Noto emoji; normal fallback'),
+              EmojiRenderStyle.threeD => localized(
+                  'Google Noto 3D 静态表情，缺失资源回退常规',
+                  'Google Noto 3D 靜態表情，缺失資源回退一般',
+                  'Google Noto 3D artwork; normal fallback'),
+            };
+            return ListTile(
+              leading: Icon(
+                Icons.emoji_emotions_outlined,
+                color: context.emphasis.accent,
+              ),
+              title: Text(context.l10n.appearance_emojiType),
+              subtitle: Text(label(selected)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showInteractionBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (sheetContext) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final style in EmojiRenderStyle.values)
+                        ListTile(
+                          title: Text(label(style)),
+                          subtitle: Text(description(style)),
+                          trailing: selected == style
+                              ? Icon(Icons.check,
+                                  color: sheetContext.emphasis.selected)
+                              : null,
+                          onTap: () {
+                            ref.read(preferencesProvider.notifier)
+                                .setEmojiRenderStyle(style);
+                            Navigator.pop(sheetContext);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
         CustomModel(
           id: 'emojiStyle',
           title: l10n.appearance_emojiStyle,
@@ -565,7 +632,7 @@ class _EmojiStyleSection extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Text(
-            l10n.appearance_emojiStyleDesc,
+            '${l10n.appearance_emojiStyle}\n${l10n.appearance_emojiStyleDesc}',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
