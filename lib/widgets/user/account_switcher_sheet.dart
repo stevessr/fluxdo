@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -429,7 +430,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         if (hostContext.mounted) {
           unawaited(
             Navigator.of(hostContext).push(
-              MaterialPageRoute(builder: (_) => const AccountManagePage()),
+              InteractionPageRoute(builder: (_) => const AccountManagePage()),
             ),
           );
         }
@@ -776,7 +777,7 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
     navigator.pop();
     unawaited(
       navigator.push(
-        MaterialPageRoute(builder: (_) => const AccountManagePage()),
+        InteractionPageRoute(builder: (_) => const AccountManagePage()),
       ),
     );
   }

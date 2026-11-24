@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'package:material_ui/material_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -25,7 +26,7 @@ class PostGrantedBadgeIcon extends StatelessWidget {
         key: ValueKey('post-granted-badge-${badge.id}'),
         borderRadius: BorderRadius.circular(6),
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
+          InteractionPageRoute<void>(
             builder: (_) => BadgePage(
               badgeId: badge.id,
               badgeSlug: badge.slug,

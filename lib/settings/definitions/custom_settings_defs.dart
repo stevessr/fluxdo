@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show showInteractionDialog;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -112,7 +113,7 @@ List<SettingsGroup> buildCustomSettingsGroups(BuildContext context) {
             icon: Icons.verified_user_outlined,
             wrapSubtitle: true,
             onTap: (context, ref) {
-              showDialog<void>(
+              showInteractionDialog<void>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
                   title: Text(copy.mobileSourceTitle),
@@ -167,7 +168,7 @@ Future<void> _showMobileSourceModelDialog(
   );
 
   try {
-    final result = await showDialog<String>(
+    final result = await showInteractionDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(copy.mobileSourceModelDialogTitle),

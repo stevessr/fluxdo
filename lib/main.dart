@@ -1325,7 +1325,7 @@ class _MainPageState extends ConsumerState<MainPage>
     final request = await PicoVrService.instance.consumeLaunchRequest();
     if (!mounted || request == null) return;
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute<void>(
+      InteractionPageRoute<void>(
         builder: (_) => TopicDetailPage(
           topicId: request.topicId,
           scrollToPostNumber: request.postNumber,

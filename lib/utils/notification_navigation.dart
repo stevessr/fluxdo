@@ -334,7 +334,7 @@ Future<void> _openReactionTabAfterLookup(
     );
   } else {
     navigatorKey.currentState?.push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => ReactionNotificationTargetPage(
           notification: notification,
         ),

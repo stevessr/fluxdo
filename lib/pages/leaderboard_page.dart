@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute, showInteractionDialog;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -184,7 +185,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
 
   void _openUser(_LeaderboardEntry entry) {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => UserProfilePage(username: entry.username),
       ),
     );
@@ -243,7 +244,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                 ),
                 IconButton(
                   tooltip: _copy(context).about,
-                  onPressed: () => showDialog<void>(
+                  onPressed: () => showInteractionDialog<void>(
                     context: context,
                     builder: (dialogContext) => AlertDialog(
                       title: Text(_copy(context).globalTitle),

@@ -73,7 +73,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
               title: Text(localized('Emoji 风格', 'Emoji 風格', 'Emoji style')),
               subtitle: Text(label(selected)),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => showModalBottomSheet<void>(
+              onTap: () => showInteractionBottomSheet<void>(
                 context: context,
                 showDragHandle: true,
                 builder: (sheetContext) => SafeArea(

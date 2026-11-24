@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -391,7 +392,7 @@ class _RadialAccountQuickSwitcherOverlayState
         if (hostContext.mounted) {
           unawaited(
             Navigator.of(hostContext).push(
-              MaterialPageRoute(builder: (_) => const AccountManagePage()),
+              InteractionPageRoute(builder: (_) => const AccountManagePage()),
             ),
           );
         }

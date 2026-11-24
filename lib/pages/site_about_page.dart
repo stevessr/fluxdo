@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -84,7 +85,7 @@ class _SiteAboutPageState extends ConsumerState<SiteAboutPage> {
 
   void _openUser(SiteAboutUser user) {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => UserProfilePage(username: user.username),
       ),
     );

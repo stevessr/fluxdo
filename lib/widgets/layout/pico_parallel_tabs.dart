@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show showInteractionBottomSheet;
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -61,7 +62,7 @@ class PicoParallelTabs extends StatelessWidget {
 
   void _showTabActions(BuildContext context, int index) {
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
-    showModalBottomSheet<void>(
+    showInteractionBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(

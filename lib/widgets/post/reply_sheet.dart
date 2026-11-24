@@ -1574,7 +1574,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet>
     Navigator.of(context).pop();
     await Future<void>.delayed(Duration.zero);
     appNavigator?.push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => CreateTopicPage(
           initialCategoryId: widget.categoryId,
           initialContent: content,

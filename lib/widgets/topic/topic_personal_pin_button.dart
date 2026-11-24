@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show showInteractionBottomSheet;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -220,7 +221,7 @@ class _TopicPersonalPinButtonState
     bool isPinned,
   ) async {
     final requestedTopicId = widget.topicId;
-    final choice = await showModalBottomSheet<bool>(
+    final choice = await showInteractionBottomSheet<bool>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
