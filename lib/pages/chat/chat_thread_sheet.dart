@@ -112,22 +112,11 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
   @override
   void initState() {
     super.initState();
-    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onPluginImageAvailable());
   }
 
-  void _onPluginImageAvailable() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          !(ModalRoute.of(context)?.isCurrent ?? true) ||
-          _isUploadingImage) {
-        return;
-      }
-      final image = ExternalPluginService.instance.pendingImage.value;
-      if (image == null) return;
-      ExternalPluginService.instance.consumeImage(image);
-      unawaited(_attachGeneratedImage(image));
-    });
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted) return;
+    unawaited(_attachGeneratedImage(image));
   }
 
   Future<void> _attachGeneratedImage(GeneratedPluginImage image) async {
@@ -160,7 +149,6 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
 
   @override
   void dispose() {
-    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _textController.dispose();
     _inputFocusNode.dispose();
     _scrollController.dispose();
@@ -1252,6 +1240,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                   SizedBox(
                     height: 240,
                     child: EmojiStickerPanel(
+                      onGeneratedImage: _onPluginImageAvailable,
                       onEmojiSelected: (emoji) {
                         final text = _textController.text;
                         final selection = _textController.selection;

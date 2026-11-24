@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/rendering.dart'
     show
         BoxHitTestResult,
@@ -329,8 +330,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _textController.addListener(_onTextChanged);
-    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onPluginImageAvailable());
     // 上报用户进入聊天（用于在线状态追踪），并启动周期性心跳
     _reportPresence();
     _presenceTimer = Timer.periodic(
@@ -368,7 +367,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
   @override
   void dispose() {
-    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _presenceTimer?.cancel();
     _markAsReadTimer?.cancel();
     _scrollController.removeListener(_onScroll);
@@ -642,18 +640,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   /// Companion images are chat attachments, not post markdown.
   /// Do not consume a result while a thread dialog or another composer owns
   /// the topmost route.
-  void _onPluginImageAvailable() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          !(ModalRoute.of(context)?.isCurrent ?? true) ||
-          _isUploadingImage) {
-        return;
-      }
-      final image = ExternalPluginService.instance.pendingImage.value;
-      if (image == null) return;
-      ExternalPluginService.instance.consumeImage(image);
-      unawaited(_attachGeneratedImage(image));
-    });
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted) return;
+    unawaited(_attachGeneratedImage(image));
   }
 
   Future<void> _attachGeneratedImage(GeneratedPluginImage image) async {
@@ -1527,8 +1516,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 textInputAction: TextInputAction.search,
                 decoration: const InputDecoration(
                   hintText: '搜索此对话中的消息',
-                  border: InputBorder.none,
-                ),
+                ).withoutBorder(),
                 onSubmitted: _runChannelSearch,
               ),
               actions: [
@@ -2395,6 +2383,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   SizedBox(
                     height: 280,
                     child: EmojiStickerPanel(
+                      onGeneratedImage: _onPluginImageAvailable,
                       onEmojiSelected: _onEmojiSelected,
                       onStickerSelected: _onStickerSelected,
                       onBackspace: _onEmojiBackspace,

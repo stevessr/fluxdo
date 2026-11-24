@@ -49,10 +49,16 @@ class EmojiStyleAssets {
 
   /// Official static Noto artwork; no system font installation required.
   static String? staticUrlFor(String name, String set) {
-    if (set != 'noto') return null;
     final unicode = unicodeFor(name);
     if (unicode == null) return null;
-    return 'https://fonts.gstatic.com/s/e/notoemoji/latest/$unicode/512.png';
+    final parts = unicode.split('_');
+    final twemoji = (parts.contains('200d') ? parts : parts.where((p) => p != 'fe0f')).join('-');
+    return switch (set) {
+      'noto' => 'https://fonts.gstatic.com/s/e/notoemoji/latest/$unicode/512.png',
+      'twemoji' => 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/$twemoji.png',
+      'openmoji' => 'https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@15.1.0/color/618x618/${twemoji.toUpperCase()}.png',
+      _ => null,
+    };
   }
 
   static String? urlFor(String name, EmojiRenderStyle style) {

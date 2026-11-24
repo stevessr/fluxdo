@@ -67,17 +67,16 @@ class ExternalPluginService {
 
   final MethodChannel _channel;
 
-  /// Preserve the result until a composer mounts, even after the plugin exits.
-  final ValueNotifier<GeneratedPluginImage?> pendingImage = ValueNotifier(null);
-
-  void consumeImage(GeneratedPluginImage image) {
-    if (identical(pendingImage.value, image)) pendingImage.value = null;
-  }
+  /// A result belongs only to the editor that initiated this launch.
+  ValueChanged<GeneratedPluginImage>? _imageReceiver;
 
   Future<void> _onPlatformMethod(MethodCall call) async {
+    if (call.method != 'generatedImage' && call.method != 'generatedImageCancelled') return;
+    final receiver = _imageReceiver;
+    _imageReceiver = null;
     if (call.method != 'generatedImage') return;
     final image = GeneratedPluginImage.fromPlatformValue(call.arguments);
-    if (image != null) pendingImage.value = image;
+    if (image != null) receiver?.call(image);
   }
 
   Future<List<ExternalPlugin>> installedPlugins() async {
@@ -99,17 +98,24 @@ class ExternalPluginService {
     }
   }
 
-  Future<bool> launchPlugin(ExternalPlugin plugin) async {
+  Future<bool> launchPlugin(ExternalPlugin plugin, {
+    ValueChanged<GeneratedPluginImage>? onGeneratedImage,
+  }) async {
     if (!isSupported) return false;
+    _imageReceiver = onGeneratedImage;
     try {
-      return await _channel.invokeMethod<bool>(
+      final launched = await _channel.invokeMethod<bool>(
             'launchPlugin',
             {'id': plugin.id},
           ) ??
           false;
+      if (!launched) _imageReceiver = null;
+      return launched;
     } on MissingPluginException {
+      _imageReceiver = null;
       return false;
     } on PlatformException catch (error) {
+      _imageReceiver = null;
       debugPrint('插件启动失败: ${error.message}');
       return false;
     }

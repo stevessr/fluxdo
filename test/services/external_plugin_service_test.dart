@@ -69,6 +69,21 @@ void main() {
     expect(await service.launchPlugin(plugin), isFalse);
   });
 
+  test('generated image is delivered once to the initiating composer', () async {
+    final service = ExternalPluginService(channel: channel);
+    const plugin = ExternalPlugin(id: 'example.plugin/Main', packageName: 'example.plugin', label: 'Generator');
+    messenger.setMockMethodCallHandler(channel, (_) async => true);
+    final received = <GeneratedPluginImage>[];
+    expect(await service.launchPlugin(plugin, onGeneratedImage: received.add), isTrue);
+    final payload = const StandardMethodCodec().encodeMethodCall(MethodCall('generatedImage', {
+      'bytes': Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]),
+      'fileName': 'stevessr_generated.png',
+    }));
+    await messenger.handlePlatformMessage(channel.name, payload, (_) {});
+    await messenger.handlePlatformMessage(channel.name, payload, (_) {});
+    expect(received, hasLength(1));
+  });
+
   test('generated image handoff validates name, type and size', () {
     final bytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
     final image = GeneratedPluginImage.fromPlatformValue({

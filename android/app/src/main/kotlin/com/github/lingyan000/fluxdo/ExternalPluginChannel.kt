@@ -69,7 +69,10 @@ internal class ExternalPluginChannel(
      */
     fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         if (requestCode != INSERT_IMAGE_REQUEST) return false
-        if (resultCode != Activity.RESULT_OK) return true
+        if (resultCode != Activity.RESULT_OK) {
+            channel.invokeMethod("generatedImageCancelled", null)
+            return true
+        }
 
         val uri: Uri = data?.data ?: return true
         if (uri.scheme != "content") return true

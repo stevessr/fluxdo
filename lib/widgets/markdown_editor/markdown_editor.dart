@@ -192,24 +192,17 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     DiscourseCookService().warmUp();
     _previousText = widget.controller.text;
     widget.controller.addListener(_handleTextChange);
-    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onPluginImageAvailable());
   }
 
   /// The companion APK returns bytes, not a post URL. Use the normal upload
   /// dialog and anchored Markdown insertion so the editor owns the draft.
-  void _onPluginImageAvailable() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
-      final toolbar = _toolbarKey.currentState;
-      final image = ExternalPluginService.instance.pendingImage.value;
-      if (toolbar == null || image == null) return;
-      ExternalPluginService.instance.consumeImage(image);
-      unawaited(toolbar.insertGeneratedImageFromBytes(
-        bytes: image.bytes,
-        fileName: image.fileName,
-      ));
-    });
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted) return;
+    final toolbar = _toolbarKey.currentState;
+    if (toolbar == null) return;
+    unawaited(toolbar.insertGeneratedImageFromBytes(
+      bytes: image.bytes, fileName: image.fileName,
+    ));
   }
 
   @override
@@ -404,7 +397,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   @override
   void dispose() {
-    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _toolsAnchor.dispose();
     _emojiPopover?.dispose();
     _undoController.dispose();
@@ -1012,6 +1004,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     // EmojiStickerPanel 只创建一次(见 _emojiPanelChild 注释);
     // 高度变化只影响外层 SizedBox,不触达 grid 子树。
     _emojiPanelChild ??= EmojiStickerPanel(
+      onGeneratedImage: _onPluginImageAvailable,
       // 桌面悬浮弹层:搜索走内联视图,布局按小窗收紧;
       // 面板内开 Navigator 层 sheet(表情包市场)前先收弹层
       inlineSearch: _isDesktop,

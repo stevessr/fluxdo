@@ -800,23 +800,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         ..addListener(_onEmojiPopoverChanged);
     }
     if (kDebugMode) EditorImeClient.debugLogging = true;
-    ExternalPluginService.instance.pendingImage.addListener(_onPluginImageAvailable);
     _importInitial();
   }
 
-  void _onPluginImageAvailable() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          _documentReplaced ||
-          _editor == null ||
-          !(ModalRoute.of(context)?.isCurrent ?? true)) {
-        return;
-      }
-      final image = ExternalPluginService.instance.pendingImage.value;
-      if (image == null) return;
-      ExternalPluginService.instance.consumeImage(image);
-      unawaited(_insertGeneratedImage(image));
-    });
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted || _documentReplaced || _editor == null) return;
+    unawaited(_insertGeneratedImage(image));
   }
 
   /// 弹层开合同步 _showEmojiPanel(驱动工具栏表情按钮高亮)
@@ -867,7 +856,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         _importing = false;
       });
       pendingSession = null;
-      _onPluginImageAvailable();
       _recoveryScope ??= _currentRecoveryScope();
       await _readRecoveries();
     } catch (error) {
@@ -903,7 +891,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
 
   @override
   void dispose() {
-    ExternalPluginService.instance.pendingImage.removeListener(_onPluginImageAvailable);
     _uploads.dispose();
     _recoveryUserSub?.close();
     _prefsSub?.close();
@@ -2239,6 +2226,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 构建(或复用)EmojiStickerPanel 缓存实例,docked 与桌面悬浮弹层共用
   Widget _ensureEmojiPanelChild() {
     _emojiPanelChild ??= EmojiStickerPanel(
+      onGeneratedImage: _onPluginImageAvailable,
       // 桌面悬浮弹层:搜索走内联视图,布局按小窗收紧;
       // 面板内开 Navigator 层 sheet(表情包市场)前先收弹层
       inlineSearch: _isDesktop,
