@@ -1,4 +1,9 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute, showInteractionDialog, UiShapesContext, UiEmphasisContext;
+import 'package:common_ui/common_ui.dart'
+    show
+        InteractionPageRoute,
+        showInteractionDialog,
+        UiShapesContext,
+        UiEmphasisContext;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
@@ -480,7 +485,11 @@ class _PeriodSelector extends StatelessWidget {
                       ),
                     ),
                     if (period == selected)
-                      Icon(AppIcons.check, size: 18, color: context.emphasis.selected),
+                      Icon(
+                        AppIcons.check,
+                        size: 18,
+                        color: context.emphasis.selected,
+                      ),
                   ],
                 ),
               );

@@ -86,13 +86,12 @@ class ToolCellBody extends StatelessWidget {
                 child: Container(
                   width: 18,
                   height: 18,
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: pinned
                         ? theme.colorScheme.primary
                         : theme.colorScheme.surfaceContainerHighest,
-                    shape: BoxShape.circle,
-                    border: Border.fromBorderSide(
-                      BorderSide(color: theme.colorScheme.surface, width: 1.5),
+                    shape: context.shapes.circle(
+                      side: BorderSide(color: theme.colorScheme.surface, width: 1.5),
                     ),
                   ),
                   child: Icon(

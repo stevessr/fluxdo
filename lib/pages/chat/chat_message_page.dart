@@ -1228,12 +1228,12 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                     ),
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
+                                      decoration: ShapeDecoration(
                                         color: Theme.of(ctx)
                                             .colorScheme
                                             .surfaceContainerHighest
                                             .withValues(alpha: 0.7),
-                                        shape: BoxShape.circle,
+                                        shape: ctx.shapes.circle(),
                                       ),
                                       child: EmojiText(
                                         ':$emoji:',
@@ -2523,9 +2523,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           child: GestureDetector(
             onTap: () => _removeUpload(index),
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: ShapeDecoration(
                 color: Colors.black54,
-                shape: BoxShape.circle,
+                shape: context.shapes.circle(),
               ),
               child: const Icon(
                 Icons.close_rounded,

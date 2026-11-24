@@ -986,7 +986,6 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     setState(() => _routeTransitionDone = true);
   }
 
-
   @override
   void dispose() {
     InlinePostsStore.release(_instanceId);
@@ -2147,7 +2146,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
                     detail.isAssigned
                         ? context.l10n.topicAssign_assignedTo(
                             detail.assignedToUser?.displayName ??
-                                detail.assignedToGroupName ?? '',
+                                detail.assignedToGroupName ??
+                                '',
                           )
                         : context.l10n.topicAssign_title,
                   ),
@@ -2822,9 +2822,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     if (detail == null) return;
     // 段映射基于过滤后列表,跳转目标必须同口径
     final posts = _filteredDetail(detail).postStream.posts;
-    unawaited(_runReadingJump(
-      (_) => _tocController.scrollToHeading(entry, posts),
-    ));
+    unawaited(
+      _runReadingJump((_) => _tocController.scrollToHeading(entry, posts)),
+    );
   }
 
   /// 路由进度悬浮条手势触发的 [ProgressGestureAction] 到对应业务方法
@@ -3296,10 +3296,8 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
         ValueListenableBuilder<bool>(
           valueListenable: _replySession.presentedNotifier,
           child: topicScaffold,
-          builder: (context, presented, child) => KeyboardInsetIsolation(
-            active: !presented,
-            child: child!,
-          ),
+          builder: (context, presented, child) =>
+              KeyboardInsetIsolation(active: !presented, child: child!),
         ),
         Positioned.fill(child: _buildBottomMenuLayer(params)),
         Positioned.fill(child: _buildQuickReplyLayer(params)),
@@ -3843,8 +3841,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
           controller: _nestedPostListController,
           nestedState: nestedState,
           onWithdrawPendingPost: isLoggedIn ? _handleWithdrawPending : null,
-          onWithdrawAndEditPendingPost:
-              isLoggedIn ? _handleWithdrawAndEditPending : null,
+          onWithdrawAndEditPendingPost: isLoggedIn
+              ? _handleWithdrawAndEditPending
+              : null,
           params: nestedParams,
           session: _nestedReadingSession,
           resumePosition: (_nestedResumePosition?.postNumber ?? 0) > 1
