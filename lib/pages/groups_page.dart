@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext, UiEmphasisContext;
+import 'package:common_ui/common_ui.dart'
+    show InteractionPageRoute, UiShapesContext, UiEmphasisContext;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

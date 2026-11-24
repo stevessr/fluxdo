@@ -1,4 +1,5 @@
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
+import 'package:common_ui/common_ui.dart'
+    show InteractionPageRoute, UiShapesContext;
 import 'package:material_ui/material_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 

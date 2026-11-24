@@ -74,18 +74,18 @@ void main() {
         await tester.pumpWidget(
           TranslationProvider(
             child: ProviderScope(
-            overrides: [discourseServiceProvider.overrideWithValue(service)],
-            child: MaterialApp(
-              locale: const Locale('zh'),
-              supportedLocales: const [Locale('en'), Locale('zh')],
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              home: detail
-                  ? const GroupPage(groupName: 'test_group')
-                  : const GroupsPage(),
+              overrides: [discourseServiceProvider.overrideWithValue(service)],
+              child: MaterialApp(
+                locale: const Locale('zh'),
+                supportedLocales: const [Locale('en'), Locale('zh')],
+                localizationsDelegates: const [
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                home: detail
+                    ? const GroupPage(groupName: 'test_group')
+                    : const GroupsPage(),
               ),
             ),
           ),
