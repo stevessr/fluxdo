@@ -213,7 +213,9 @@
   "postVoting_answerCount": "{count} Answers",
   "@postVoting_answerCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_sortVotes": "Votes",
@@ -222,7 +224,9 @@
   "postVoting_commentSheetTitle": "Comment on @{username}'s post",
   "@postVoting_commentSheetTitle": {
     "placeholders": {
-      "username": {"type": "String"}
+      "username": {
+        "type": "String"
+      }
     }
   },
   "postVoting_commentSubmit": "Post",
@@ -231,13 +235,17 @@
   "postVoting_commentTooShort": "At least {count} characters required",
   "@postVoting_commentTooShort": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_commentsMore": "{count} more comments",
   "@postVoting_commentsMore": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_noVoters": "No votes yet",
@@ -246,7 +254,9 @@
   "postVoting_votersMore": "{count} voters in total, showing latest 20",
   "@postVoting_votersMore": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_votersTitle": "Voters",
@@ -267,19 +277,25 @@
   "postRevision_indicatorTooltipFirst": "Created at {time}",
   "@postRevision_indicatorTooltipFirst": {
     "placeholders": {
-      "time": {"type": "String"}
+      "time": {
+        "type": "String"
+      }
     }
   },
   "postRevision_indicatorTooltipEdited": "Last edited at {time}",
   "@postRevision_indicatorTooltipEdited": {
     "placeholders": {
-      "time": {"type": "String"}
+      "time": {
+        "type": "String"
+      }
     }
   },
   "postRevision_wikiEditTooltip": "Wiki · last edited at {time}",
   "@postRevision_wikiEditTooltip": {
     "placeholders": {
-      "time": {"type": "String"}
+      "time": {
+        "type": "String"
+      }
     }
   },
   "postRevision_wikiAbout": "Wiki post, anyone can edit",
@@ -288,20 +304,28 @@
   "postRevision_versionLabel": "v{current} / {total}",
   "@postRevision_versionLabel": {
     "placeholders": {
-      "current": {"type": "int"},
-      "total": {"type": "int"}
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "postRevision_editedBy": "Edited by {user}",
   "@postRevision_editedBy": {
     "placeholders": {
-      "user": {"type": "String"}
+      "user": {
+        "type": "String"
+      }
     }
   },
   "postRevision_editReason": "Reason: {reason}",
   "@postRevision_editReason": {
     "placeholders": {
-      "reason": {"type": "String"}
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "postRevision_editReasonEmpty": "No edit reason provided",
@@ -324,14 +348,18 @@
   "postRevision_revertConfirmTitle": "Revert to revision {revision}",
   "@postRevision_revertConfirmTitle": {
     "placeholders": {
-      "revision": {"type": "int"}
+      "revision": {
+        "type": "int"
+      }
     }
   },
   "postRevision_revertConfirmBody": "Reverting creates a new edit using the chosen revision content. Continue?",
   "postRevision_revertSuccess": "Reverted to revision {revision}",
   "@postRevision_revertSuccess": {
     "placeholders": {
-      "revision": {"type": "int"}
+      "revision": {
+        "type": "int"
+      }
     }
   },
   "postRevision_permanentlyDelete": "Permanently delete all revisions",
@@ -348,13 +376,17 @@
   "postRevision_hideSuccess": "Hid revision {revision}",
   "@postRevision_hideSuccess": {
     "placeholders": {
-      "revision": {"type": "int"}
+      "revision": {
+        "type": "int"
+      }
     }
   },
   "postRevision_showSuccess": "Showed revision {revision}",
   "@postRevision_showSuccess": {
     "placeholders": {
-      "revision": {"type": "int"}
+      "revision": {
+        "type": "int"
+      }
     }
   },
   "postRevision_deleteAllSuccess": "All revisions permanently deleted",
@@ -375,5 +407,9 @@
       }
     }
   },
-  "nested_restoreFailed": "Could not restore this position. Please try again."
+  "nested_restoreFailed": "Could not restore this position. Please try again.",
+  "post_quoteExpand": "Expand",
+  "post_quoteCollapse": "Collapse",
+  "post_quoteBlocked": "Quote from a locally blocked user hidden.",
+  "post_quoteGoToFloor": "Go to original post #{number}"
 }
