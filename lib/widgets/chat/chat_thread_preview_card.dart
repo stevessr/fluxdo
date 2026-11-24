@@ -15,7 +15,9 @@ String chatThreadPreviewText(String value) {
   }
   final fragment = html.parseFragment(value);
   for (final image in fragment.querySelectorAll('img')) {
-    final alt = image.attributes['alt'] ?? image.attributes['title'] ?? '';
+    final alt = (image.attributes['alt']?.isNotEmpty ?? false)
+        ? image.attributes['alt']!
+        : image.attributes['title'] ?? '';
     final isEmoji = image.classes.contains('emoji') ||
         image.classes.contains('emoji-custom') ||
         (image.attributes['src'] ?? '').contains('/emoji/');
@@ -50,11 +52,17 @@ class ChatThreadListItem extends StatelessWidget {
     final theme = Theme.of(context);
     final original = thread.originalMessage;
     final title = thread.title?.trim();
-    final root = chatThreadPreviewText(
-      (title != null && title.isNotEmpty)
-          ? title
-          : original?.excerpt ?? original?.message ?? '消息串 #${thread.id}',
-    );
+    final excerpt = chatThreadPreviewText(original?.excerpt ?? '');
+    final cooked = excerpt.isEmpty
+        ? chatThreadPreviewText(original?.cooked ?? '')
+        : '';
+    final root = title != null && title.isNotEmpty
+        ? title
+        : excerpt.isNotEmpty
+            ? excerpt
+            : cooked.isNotEmpty
+                ? cooked
+                : original?.message.trim() ?? '';
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -116,6 +124,11 @@ class ChatThreadReplyCard extends StatelessWidget {
     final user = last ?? thread.originalMessage?.user;
     final name = user?.username;
     final time = thread.lastActivityAt;
+    final dateLabel = time == null
+        ? null
+        : DateUtils.isSameDay(time, DateTime.now())
+            ? MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(time))
+            : TimeUtils.formatSmartDate(time);
     final excerpt = chatThreadPreviewText(preview?.lastReplyExcerpt ?? '');
     final participants = <int, ChatUser>{};
     for (final participant in [...?preview?.participantUsers, if (last != null) last]) {
@@ -151,10 +164,10 @@ class ChatThreadReplyCard extends StatelessWidget {
                                 fontWeight: FontWeight.w600,
                               )),
                           ),
-                        if (time != null) ...[
+                        if (dateLabel != null) ...[
                           const SizedBox(width: 6),
                           Flexible(
-                            child: Text(TimeUtils.formatSmartDate(time),
+                            child: Text(dateLabel,
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,

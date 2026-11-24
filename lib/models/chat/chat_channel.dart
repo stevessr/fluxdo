@@ -452,9 +452,14 @@ class ChatChannel {
           )
         : null;
     // Discourse 已删除 last_message_sent_at 列，时间来自 last_message.created_at
+    final legacyTime = TimeUtils.parseUtcTime(json['last_message_sent_at']?.toString());
+    final messageTime = json['last_message'] is Map
+        ? TimeUtils.parseUtcTime((json['last_message'] as Map)['created_at']?.toString())
+        : null;
     final parsedLastMessageSentAt =
-        TimeUtils.parseUtcTime(json['last_message_sent_at']?.toString()) ??
-        parsedLastMessage?.createdAt;
+        messageTime != null && (legacyTime == null || messageTime.isAfter(legacyTime))
+            ? messageTime
+            : legacyTime;
 
     return ChatChannel(
       id: (json['id'] as num?)?.toInt() ?? 0,

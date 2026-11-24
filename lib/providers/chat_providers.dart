@@ -55,6 +55,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       // 在线状态获取失败不影响主流程
     }
 
+    if (!ref.mounted) return state.copyWith(onlineUserIds: onlineUserIds);
     _syncActivitySubscriptions(state);
     ref.onDispose(() {
       for (final entry in _activityCallbacks.entries) {
@@ -88,7 +89,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
         if (id == null || current == null) return;
         try {
           final json = Map<String, dynamic>.from(raw['message'] as Map);
-          if (json['created_at'] == null) return;
+          if (DateTime.tryParse(json['created_at']?.toString() ?? '') == null) return;
           final incoming = ChatMessage.fromJson(json);
           if (incoming.id <= 0) return;
           state = AsyncData(current.mapChannel(id, (channel) {
@@ -152,7 +153,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       }
     } catch (_) {}
 
-    _syncActivitySubscriptions(channelsState);
+    if (ref.mounted) _syncActivitySubscriptions(channelsState);
     return channelsState.copyWith(onlineUserIds: onlineUserIds);
   }
 
@@ -1211,6 +1212,7 @@ List<ChatMessage> _parseChatMessageList(Map<String, dynamic> raw) {
 /// Discourse 在 /chat/:id/new-messages 发布 thread 活动。
 /// 合并短时间内的多条回复，避免逐条重拉分页列表。
 void _watchThreadActivity(Ref ref, Iterable<int> channelIds, {Set<int>? threadIds}) {
+  if (!ref.mounted) return;
   final bus = ref.read(messageBusServiceProvider);
   Timer? timer;
   void onMessage(MessageBusMessage event) {

@@ -81,7 +81,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     final prefs = ref.read(sharedPreferencesProvider);
     final storedFilter = prefs.getString(_channelFilterPreferenceKey);
-    final storedSort = prefs.getString(_channelSortPreferenceKey);
+    final storedSort = prefs.getString(_channelSortPreferenceKey) ??
+        (prefs.getString('chat_channel_list_sort') == _ChatChannelSort.alphabetical.name
+            ? _ChatChannelSort.alphabetical.name
+            : null);
     _channelFilter = _ChatChannelFilter.values.firstWhere(
       (value) => value.name == storedFilter,
       orElse: () => _ChatChannelFilter.all,

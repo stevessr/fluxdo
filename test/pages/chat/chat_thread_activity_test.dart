@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/models/chat/chat_models.dart';
 import 'package:fluxdo/widgets/chat/chat_thread_preview_card.dart';
@@ -25,6 +26,29 @@ void main() {
       ChatThread(id: 1, channelId: 1, preview: ChatThreadPreview(lastReplyCreatedAt: time, lastReplyId: 30)),
     ]..sort(ChatThread.compareRecentActivity);
     expect(items.map((item) => item.id), [1, 2, 9]);
+  });
+
+  test('channel activity prefers newest real timestamp and does not fabricate missing dates', () {
+    final channel = ChatChannel.fromJson({
+      'id': 1,
+      'last_message_sent_at': '2026-07-31T00:00:00Z',
+      'last_message': {'id': 2, 'created_at': '2026-11-24T00:00:00Z'},
+    });
+    expect(channel.lastMessageSentAt?.toUtc(), DateTime.utc(2026, 11, 24));
+    expect(ChatChannel.fromJson({'id': 2, 'last_message': {'id': 3}}).lastMessageSentAt, isNull);
+  });
+
+  testWidgets('thread card keeps reply count visible on narrow screens', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Center(
+      child: SizedBox(width: 240, child: ChatThreadListItem(
+        thread: const ChatThread(id: 1, channelId: 1, replyCount: 7,
+          title: 'A very long original message that should wrap on a narrow screen',
+          preview: ChatThreadPreview(replyCount: 7, lastReplyExcerpt: 'A long reply preview that wraps')),
+        onTap: () {},
+      )),
+    ))));
+    expect(tester.takeException(), isNull);
+    expect(find.text('7 个回复'), findsOneWidget);
   });
 
   test('cooked emoji previews retain shortcode and decode entities', () {
