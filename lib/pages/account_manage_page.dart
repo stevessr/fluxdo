@@ -1,5 +1,9 @@
 import 'package:common_ui/common_ui.dart'
-    show UiShapesContext, UiEmphasis, InteractionPageRoute, showInteractionDialog;
+    show
+        UiShapesContext,
+        UiEmphasis,
+        InteractionPageRoute,
+        showInteractionDialog;
 
 import 'dart:async';
 

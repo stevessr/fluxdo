@@ -277,11 +277,14 @@ void main() {
     expect(requestedTypes, [null]);
 
     await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-filter-my')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-filter-public')));
     await tester.pump();
 
