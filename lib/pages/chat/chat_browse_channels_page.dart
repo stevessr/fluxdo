@@ -64,7 +64,7 @@ class _ChatBrowseChannelsPageState extends ConsumerState<ChatBrowseChannelsPage>
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Material(
               color: theme.colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: context.shapes.borderRadius(12),
               clipBehavior: Clip.antiAlias,
               child: TabBar(
                 controller: _tabController,
@@ -72,7 +72,7 @@ class _ChatBrowseChannelsPageState extends ConsumerState<ChatBrowseChannelsPage>
                 indicatorSize: TabBarIndicatorSize.tab,
                 indicator: BoxDecoration(
                   color: theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: context.shapes.borderRadius(10),
                 ),
                 labelColor: theme.colorScheme.onSecondaryContainer,
                 unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
@@ -414,7 +414,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           decoration: BoxDecoration(
             color: theme.colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: context.shapes.borderRadius(999),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -505,7 +505,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: context.shapes.borderRadius(6),
                 ),
                 child: Text(
                   _statusLabel(),

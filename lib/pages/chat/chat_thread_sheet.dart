@@ -387,8 +387,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => ChatMessageFlagSheet(
         channelId: widget.channelId,
@@ -581,7 +581,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: context.shapes.borderRadius(8),
           child: upload.path.toLowerCase().endsWith('.svg')
               ? Container(
                   width: 64,
@@ -638,8 +638,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     showAppBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SizedBox(
         height: MediaQuery.of(ctx).size.height * 0.45,
@@ -661,8 +661,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
     if (message.deleted) {
       showAppBottomSheet(
         context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
         ),
         builder: (ctx) => SafeArea(
           child: Column(
@@ -695,8 +695,8 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
 
     showAppBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
@@ -733,7 +733,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                                       _saveRecentReactionEmoji(emoji);
                                       _toggleReaction(message, emoji);
                                     },
-                                    borderRadius: BorderRadius.circular(24),
+                                    borderRadius: context.shapes.borderRadius(24),
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
@@ -761,15 +761,15 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                               Navigator.pop(ctx);
                               _showFullEmojiPickerForReaction(message);
                             },
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: context.shapes.borderRadius(24),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: Theme.of(ctx)
                                     .colorScheme
                                     .primaryContainer
                                     .withValues(alpha: 0.7),
-                                shape: BoxShape.circle,
+                                shape: context.shapes.circle(),
                               ),
                               child: Icon(
                                 Icons.add_rounded,
@@ -1528,13 +1528,13 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                             color: isOwnMessage
                                 ? theme.colorScheme.primaryContainer
                                 : theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(16).copyWith(
+                            borderRadius: context.shapes.borderRadius(16).copyWith(
                               bottomLeft: isOwnMessage
-                                  ? const Radius.circular(16)
-                                  : const Radius.circular(4),
+                                  ? context.shapes.radius(16)
+                                  : context.shapes.radius(4),
                               bottomRight: isOwnMessage
-                                  ? const Radius.circular(4)
-                                  : const Radius.circular(16),
+                                  ? context.shapes.radius(4)
+                                  : context.shapes.radius(16),
                             ),
                             border: isOriginal
                                 ? Border.all(
@@ -1648,7 +1648,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                                   color: Colors.transparent,
                                   child: InkWell(
                                     onTap: () => onToggleReaction(r.emoji),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: context.shapes.borderRadius(12),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 6,
@@ -1664,7 +1664,7 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                                               : theme.colorScheme.outlineVariant
                                                     .withValues(alpha: 0.5),
                                         ),
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: context.shapes.borderRadius(12),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,

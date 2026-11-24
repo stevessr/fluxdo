@@ -1062,8 +1062,8 @@ class ChatChannelTile extends ConsumerWidget {
     final isFavorite = ref.read(chatFavoritesProvider).contains(channel.id);
     showAppBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) {
         return SafeArea(
@@ -1188,7 +1188,7 @@ class ChatChannelTile extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: context.shapes.borderRadius(10),
               ),
               child: Text(
                 channel.unreadCount > 99
@@ -1208,7 +1208,7 @@ class ChatChannelTile extends ConsumerWidget {
       tileColor: hasUnread
           ? theme.colorScheme.primaryContainer.withValues(alpha: 0.12)
           : null,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(12)),
       onTap: onTap,
       onLongPress: () => _showChannelMenu(context, ref),
     );
@@ -1242,7 +1242,7 @@ class _ChatPageSkeleton extends StatelessWidget {
                   width: 120 + (index % 3) * 60.0,
                   decoration: BoxDecoration(
                     color: shimmerColor,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: context.shapes.borderRadius(4),
                   ),
                 ),
                 subtitle: Padding(
@@ -1252,7 +1252,7 @@ class _ChatPageSkeleton extends StatelessWidget {
                     width: 180 + (index % 2) * 40.0,
                     decoration: BoxDecoration(
                       color: shimmerColor,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: context.shapes.borderRadius(4),
                     ),
                   ),
                 ),
@@ -1745,7 +1745,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     final createLabel = l10n.chat_create_group_chat;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(16)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
         child: Column(
@@ -1770,7 +1770,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                             vertical: 14,
                           ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: context.shapes.borderRadius(8),
                           ),
                         ),
                         onChanged: _onSearch,
@@ -1825,7 +1825,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                     hintText: l10n.chat_group_name_hint,
                     isDense: true,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: context.shapes.borderRadius(10),
                     ),
                   ),
                 ),
@@ -1875,7 +1875,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                       vertical: 10,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: context.shapes.borderRadius(10),
                     ),
                   ),
                   onChanged: _onSearch,
