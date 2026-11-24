@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart'
     show GlobalWidgetsLocalizations;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/pages/group_page.dart';
 import 'package:fluxdo/pages/groups_page.dart';
 import 'package:fluxdo/providers/discourse_providers.dart';
@@ -68,8 +69,11 @@ void main() {
 
         await tester.binding.setSurfaceSize(const Size(320, 700));
         addTearDown(() => tester.binding.setSurfaceSize(null));
+        LocaleSettings.setLocale(AppLocale.zh);
+        addTearDown(() => LocaleSettings.setLocale(AppLocale.en));
         await tester.pumpWidget(
-          ProviderScope(
+          TranslationProvider(
+            child: ProviderScope(
             overrides: [discourseServiceProvider.overrideWithValue(service)],
             child: MaterialApp(
               locale: const Locale('zh'),
@@ -82,6 +86,7 @@ void main() {
               home: detail
                   ? const GroupPage(groupName: 'test_group')
                   : const GroupsPage(),
+              ),
             ),
           ),
         );

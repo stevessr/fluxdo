@@ -9,14 +9,21 @@ mixin _NotificationsMixin on _DiscourseServiceBase {
   /// 不推进已读位置，与网页通知面板的分类标签一致。
   Future<NotificationListResponse> getRecentNotifications({
     List<String>? types,
+    List<String>? filterByTypes,
+    int limit = 30,
     bool silent = false,
+    bool? bumpLastSeenReviewable,
   }) async {
+    final selectedTypes = filterByTypes ?? types;
+    final categorized = selectedTypes != null && selectedTypes.isNotEmpty;
+    final effectiveSilent = silent || categorized;
+    final bumpReviewable = bumpLastSeenReviewable ?? !effectiveSilent;
     final response = await _dio.get('/notifications', queryParameters: {
       'recent': true,
-      'limit': 30,
-      'bump_last_seen_reviewable': true,
-      if (types != null && types.isNotEmpty) 'filter_by_types': types.join(','),
-      if (silent || (types != null && types.isNotEmpty)) 'silent': true,
+      'limit': limit,
+      if (bumpReviewable) 'bump_last_seen_reviewable': true,
+      if (categorized) 'filter_by_types': selectedTypes.join(','),
+      if (effectiveSilent) 'silent': true,
     });
     return NotificationListResponse.fromJson(response.data);
   }

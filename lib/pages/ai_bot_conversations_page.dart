@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 
 import '../services/discourse/discourse_service.dart';
 import '../services/preloaded_data_service.dart';
@@ -449,7 +450,15 @@ class _AiBotConversationsPageState extends State<AiBotConversationsPage> {
                 filled: true,
                 fillColor: theme.colorScheme.surface,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: context.shapes.borderRadius(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(16),
                   borderSide: BorderSide.none,
                 ),
               ),

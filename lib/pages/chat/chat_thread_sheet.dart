@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1201,7 +1202,15 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                             decoration: InputDecoration(
                               hintText: composerHint,
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
                                 borderSide: BorderSide.none,
                               ),
                               filled: true,

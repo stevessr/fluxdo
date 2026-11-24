@@ -2329,7 +2329,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             decoration: InputDecoration(
                               hintText: context.l10n.chat_input_hint,
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
                                 borderSide: BorderSide.none,
                               ),
                               filled: true,

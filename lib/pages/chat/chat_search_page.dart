@@ -190,7 +190,15 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
                 filled: true,
                 fillColor: theme.colorScheme.surfaceContainerHigh,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
                   borderSide: BorderSide.none,
                 ),
               ),
