@@ -2185,7 +2185,7 @@ class _CfChallengePageState extends State<CfChallengePage> {
         headers?.entries.any(
           (entry) =>
               entry.key.toLowerCase() == 'cf-mitigated' &&
-              CfChallengeService._isChallengeHeader(entry.value),
+              CfChallengeClassifier.isChallenge(cfMitigated: entry.value),
         ) ??
         false;
     if (challenged) {
