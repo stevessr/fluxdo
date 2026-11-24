@@ -895,7 +895,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
                       child: ListTile(
                         leading: Icon(
                           Icons.mark_email_read_outlined,
-                          color: theme.colorScheme.primary,
+                          color: UiEmphasis.of(theme).selected,
                         ),
                         title: Text(_InviteFormStrings.of(context).emailSent),
                         subtitle: Text(_lastEmailRecipient!),

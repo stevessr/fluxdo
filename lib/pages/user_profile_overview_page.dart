@@ -1411,7 +1411,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                         Icon(
                           Symbols.check_rounded,
                           size: 18,
-                          color: theme.colorScheme.primary,
+                          color: UiEmphasis.of(theme).selected,
                         ),
                     ],
                   ),
@@ -1432,7 +1432,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                           Icon(
                             Symbols.check_rounded,
                             size: 18,
-                            color: theme.colorScheme.primary,
+                            color: UiEmphasis.of(theme).selected,
                           ),
                       ],
                     ),
@@ -1453,7 +1453,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                           Icon(
                             Symbols.check_rounded,
                             size: 18,
-                            color: theme.colorScheme.primary,
+                            color: UiEmphasis.of(theme).selected,
                           ),
                       ],
                     ),
@@ -2438,7 +2438,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          Icon(icon, size: 18, color: UiEmphasis.of(theme).accent),
           const SizedBox(width: 8),
           Text(
             title,
@@ -3071,7 +3071,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                   Icon(
                     Symbols.rocket_launch_rounded,
                     size: 16,
-                    color: theme.colorScheme.primary,
+                    color: UiEmphasis.of(theme).accent,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -3154,7 +3154,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                   Icon(
                     Symbols.check_circle_rounded,
                     size: 16,
-                    color: theme.colorScheme.primary,
+                    color: UiEmphasis.of(theme).selected,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -3230,7 +3230,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                   Icon(
                     _getActionIcon(action.actionType),
                     size: 16,
-                    color: theme.colorScheme.primary,
+                    color: UiEmphasis.of(theme).accent,
                   ),
                   const SizedBox(width: 8),
                   Text(
