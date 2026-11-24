@@ -36,6 +36,10 @@ jobs:
         with:
           flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
       - name: Prepare generated directories
         run: mkdir -p assets/certs assets/images/llm
       - name: Resolve Flutter packages and l10n
@@ -82,6 +86,10 @@ jobs:
         with:
           flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14'
