@@ -8,7 +8,7 @@ on:
 
 env:
   IS_STABLE: ${{ !contains(github.ref, '-') }}
-  FLUTTER_VERSION: '3.50.0'
+  FLUTTER_VERSION: '3.50.1'
   ANDROID_NDK_VERSION: '27.3.13750724'
 
 jobs:

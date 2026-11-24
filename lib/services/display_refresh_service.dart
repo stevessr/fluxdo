@@ -12,7 +12,7 @@ class DisplayRefreshService with WidgetsBindingObserver {
   static const auto = -1;
   static const smart = -2;
   static int normalize(int? rate) =>
-      rate == smart || (rate != null && rate > 0) ? rate! : auto;
+      rate == smart ? smart : (rate != null && rate > 0 ? rate : auto);
 
   int _policy = auto;
   int _generation = 0;
@@ -98,7 +98,7 @@ class DisplayRefreshService with WidgetsBindingObserver {
   }
 
   void interaction() {
-    if (_policy != smart || !_foreground || _high == null || _low == null) return;
+    if (!_observing || _policy != smart || !_foreground || _high == null || _low == null) return;
     final generation = _generation;
     unawaited(_request(_high!, generation));
     _idle?.cancel();

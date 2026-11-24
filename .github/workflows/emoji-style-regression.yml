@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'lib/providers/preferences_provider.dart'
+      - 'lib/services/display_refresh_service.dart'
+      - 'lib/settings/definitions/appearance_defs.dart'
+      - 'test/services/display_refresh_service_test.dart'
       - 'lib/services/emoji_handler.dart'
       - 'lib/settings/definitions/reading_defs.dart'
       - 'lib/utils/fluxdo_render_callbacks.dart'
@@ -48,6 +51,9 @@ jobs:
         run: |
           flutter analyze --no-fatal-infos \
             lib/providers/preferences_provider.dart \
+            lib/services/display_refresh_service.dart \
+            lib/settings/definitions/appearance_defs.dart \
+            test/services/display_refresh_service_test.dart \
             lib/services/emoji_handler.dart \
             lib/settings/definitions/reading_defs.dart \
             lib/utils/fluxdo_render_callbacks.dart \
@@ -66,6 +72,7 @@ jobs:
           set -euo pipefail
           for url in \
             'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.webp' \
+            'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.png' \
             'https://fonts.gstatic.com/s/e/noto3demoji/latest/1fa99/512.png'; do
             curl --fail --location --silent --show-error --max-time 25 \
               --retry 2 --retry-delay 1 --output /dev/null "$url"
@@ -74,5 +81,6 @@ jobs:
         run: >-
           dart tool/flutterw.dart test
           test/emoji_render_style_test.dart
+          test/services/display_refresh_service_test.dart
           test/services/emoji_handler_late_preload_test.dart
           test/widgets/content/image_utils_test.dart

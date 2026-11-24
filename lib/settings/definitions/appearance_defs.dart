@@ -377,9 +377,11 @@ List<SettingsGroup> buildAppearanceSearchGroups(BuildContext context) {
               final rate = ref
                   .watch(preferencesProvider)
                   .displayModeRefreshRate;
-              return rate == 0
-                  ? context.l10n.appearance_displayModeAuto
-                  : '${rate}Hz';
+              return switch (rate) {
+                DisplayRefreshService.auto => context.l10n.appearance_displayModeAuto,
+                DisplayRefreshService.smart => context.l10n.appearance_displayModeSmart,
+                _ => '${rate}Hz',
+              };
             },
             onTap: (context, ref) => _showDisplayModeSheet(context, ref),
           ),
@@ -652,11 +654,7 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
     return _DisplayModeData(modes: modes, active: active);
   }
 
-  Future<void> _apply(
-    int rate,
-    List<DisplayMode> modes,
-    DisplayMode active,
-  ) async {
+  Future<void> _apply(int rate) async {
     await ref
         .read(preferencesProvider.notifier)
         .setDisplayModeRefreshRate(rate);
@@ -725,7 +723,7 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
                     groupValue: currentRate,
                     onChanged: (value) async {
                       if (value == null) return;
-                      await _apply(value, data.modes, data.active);
+                      await _apply(value);
                     },
                     child: Column(
                       mainAxisSize: MainAxisSize.min,

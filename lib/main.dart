@@ -167,7 +167,7 @@ Future<bool> _initRhttp() async {
 }
 
 /// 应用 Android 屏幕刷新率偏好。
-/// 偏好值 0 表示跟随系统（auto），非 0 则按目标刷新率从 supported 中选最匹配的 mode。
+/// 旧 0 自动归一化为 -1；-2 为智能策略，正数为固定刷新率。
 /// 失败不阻塞启动。
 Future<void> _applyAndroidDisplayMode(SharedPreferences prefs) =>
     DisplayRefreshService.instance.apply(

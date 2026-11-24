@@ -18,6 +18,15 @@ on:
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build-apk.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'packages/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/build-apk.yaml'
   workflow_dispatch:
     inputs:
       arch:
@@ -451,6 +460,7 @@ jobs:
 
   # Wait for every selected ABI to finish before editing the shared nightly release.
   publish-nightly:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     name: Publish APKs to nightly
     needs: build-apk
     runs-on: ubuntu-latest

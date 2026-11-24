@@ -1,7 +1,5 @@
 import '../constants/composer_tool_defaults.dart';
 
-import '../services/display_refresh_service.dart';
-
 import 'dart:io';
 
 import '../modules/mini_apps/mini_app_engine.dart';
@@ -21,6 +19,7 @@ import '../services/cf_challenge_service.dart';
 import '../services/log/log_writer.dart';
 import '../services/crash_context_reporter.dart';
 import '../services/emoji_handler.dart';
+import '../services/display_refresh_service.dart';
 import '../services/render_backend_service.dart';
 import '../utils/blocked_user_filter.dart';
 import '../widgets/topic/topic_card_layout.dart';
@@ -335,7 +334,7 @@ class AppPreferences {
   /// 玻璃效果能力档位。
   final GlassEffectLevel glassEffectLevel;
 
-  /// Android 屏幕刷新率偏好（0 = auto/跟随系统，其它为目标刷新率，如 60 / 90 / 120）
+  /// Android 屏幕刷新率偏好（-1 = auto，-2 = smart，正数为固定 Hz；旧 0 自动迁移）
   final int displayModeRefreshRate;
 
   /// 话题底栏手势总开关（拖动定位、上滑、长按菜单）
@@ -1271,8 +1270,8 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     await _prefs.setString(_glassEffectLevelKey, level.name);
   }
 
-  /// 设置 Android 屏幕刷新率偏好（0 = auto，其它为目标刷新率整数）。
-  /// 实际生效由调用方在写入后调用 FlutterDisplayMode.setPreferredMode 完成。
+  /// 设置 Android 屏幕刷新率偏好（-1 = auto，-2 = smart，正数为固定 Hz）。
+  /// 实际生效由 DisplayRefreshService 统一处理。
   Future<void> setDisplayModeRefreshRate(int rate) async {
     rate = DisplayRefreshService.normalize(rate);
     if (state.displayModeRefreshRate == rate) return;
