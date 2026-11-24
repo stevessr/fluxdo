@@ -167,7 +167,7 @@ void main() {
 
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    container.read(selectedSeekingProvider.notifier)
+    container.read(selectedFollowingFeedProvider.notifier)
       ..openTopicTab(topicId: 42)
       ..showFeed();
 
@@ -176,8 +176,8 @@ void main() {
 
     expect(find.text('列表页'), findsOneWidget);
     expect(find.text('topic:42'), findsNothing);
-    expect(container.read(selectedSeekingProvider).stack, hasLength(1));
-    expect(container.read(selectedSeekingProvider).showingFeed, isTrue);
+    expect(container.read(selectedFollowingFeedProvider).stack, hasLength(1));
+    expect(container.read(selectedFollowingFeedProvider).showingFeed, isTrue);
   });
 
   testWidgets('宽窄往返=同树重排,栈原样保留', (tester) async {
