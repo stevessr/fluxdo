@@ -10,12 +10,35 @@ on:
       - 'lib/widgets/common/smart_avatar.dart'
       - 'test/pages/account_manage_new_login_contract_test.dart'
       - 'test/services/avatar_cache_pool_test.dart'
+      - '.github/workflows/image-provider-cache-keys.yaml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
+      - 'lib/services/discourse_cache_manager.dart'
+      - 'lib/services/blob_image_cache.dart'
+      - 'lib/widgets/common/cached_image.dart'
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/image-provider-cache-keys.yaml
+      patterns: >-
+        ["lib/pages/account_manage_page.dart","lib/services/avatar_cache_pool.dart","lib/widgets/common/smart_avatar.dart","test/pages/account_manage_new_login_contract_test.dart","test/services/avatar_cache_pool_test.dart",".github/workflows/image-provider-cache-keys.yaml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml","lib/services/discourse_cache_manager.dart","lib/services/blob_image_cache.dart","lib/widgets/common/cached_image.dart"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

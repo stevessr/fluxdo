@@ -24,13 +24,32 @@ on:
       - 'test/services/account_cold_start_snapshot_test.dart'
       - 'test/widgets/auth/direct_login_contract_test.dart'
       - '.github/workflows/direct-login.yaml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/direct-login.yaml
+      patterns: >-
+        ["lib/pages/login_page.dart","lib/pages/webview_login_page.dart","lib/services/login_token_redeemer.dart","lib/services/user_api_key_login_flow.dart","lib/services/webview_login_session_probe.dart","lib/services/network/cookie/app_cookie_manager.dart","test/services/login_token_redeemer_test.dart","test/services/user_api_key_login_flow_test.dart","test/services/webview_login_session_probe_test.dart","test/services/network/cookie/app_cookie_manager_test.dart","lib/services/account_manager.dart","lib/services/credential_store_service.dart","lib/services/discourse/_login.dart","lib/widgets/auth/login_form.dart","lib/widgets/auth/two_factor_dialog.dart","lib/widgets/auth/webview_login_dialog.dart","test/services/credential_store_service_test.dart","test/services/account_guest_startup_recovery_test.dart","test/services/account_cold_start_snapshot_test.dart","test/widgets/auth/direct_login_contract_test.dart",".github/workflows/direct-login.yaml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

@@ -10,13 +10,32 @@ on:
       - 'test/pages/groups_directory_test.dart'
       - 'test/pages/group_membership_confirmation_test.dart'
       - '.github/workflows/groups-directory-check.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/groups-directory-check.yml
+      patterns: >-
+        ["lib/models/group.dart","lib/pages/groups_page.dart","lib/pages/group_page.dart","test/models/group_test.dart","test/pages/groups_directory_test.dart","test/pages/group_membership_confirmation_test.dart",".github/workflows/groups-directory-check.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

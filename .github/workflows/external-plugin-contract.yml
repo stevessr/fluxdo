@@ -18,13 +18,32 @@ on:
       - 'test/services/external_plugin_service_test.dart'
       - 'scripts/check_external_plugin_contract.py'
       - '.github/workflows/external-plugin-contract.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/external-plugin-contract.yml
+      patterns: >-
+        ["packages/stevessr_generator/example/android/**","android/app/src/main/AndroidManifest.xml","android/app/src/main/kotlin/**","lib/services/external_plugin_service.dart","lib/widgets/markdown_editor/markdown_editor.dart","lib/widgets/markdown_editor/rich_composer/rich_composer_editor.dart","lib/pages/chat/chat_message_page.dart","lib/pages/chat/chat_thread_sheet.dart","packages/stevessr_generator/example/lib/main.dart","packages/stevessr_generator/lib/src/pages/stevessr_generator_page.dart","lib/pages/installed_plugins_page.dart","lib/widgets/markdown_editor/emoji_sticker_panel.dart","test/services/external_plugin_service_test.dart","scripts/check_external_plugin_contract.py",".github/workflows/external-plugin-contract.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   contract:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +51,8 @@ jobs:
         run: python3 scripts/check_external_plugin_contract.py
 
   flutter-plugin:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     name: Flutter plugin discovery and editor checks
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -68,6 +89,8 @@ jobs:
         run: flutter test test/services/external_plugin_service_test.dart
 
   generator-apk:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     name: Build standalone generator plugin APK
     runs-on: ubuntu-latest
     timeout-minutes: 35

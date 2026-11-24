@@ -8,13 +8,32 @@ on:
       - 'test/pages/community_events_calendar_test.dart'
       - 'test/pages/community_events_page_test.dart'
       - '.github/workflows/community-events-calendar.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/community-events-calendar.yml
+      patterns: >-
+        ["lib/pages/community_events_page.dart","lib/pages/community_events_calendar.dart","test/pages/community_events_calendar_test.dart","test/pages/community_events_page_test.dart",".github/workflows/community-events-calendar.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

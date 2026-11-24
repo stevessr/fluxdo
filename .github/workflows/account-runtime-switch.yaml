@@ -19,13 +19,32 @@ on:
       - 'test/services/network/session_rejection_classifier_test.dart'
       - 'test/services/network/recovery/session_heal_test.dart'
       - '.github/workflows/account-runtime-switch.yaml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/account-runtime-switch.yaml
+      patterns: >-
+        ["lib/services/account_runtime_pool.dart","lib/services/account_switch_browser_cookie_cleaner.dart","lib/services/network/cookie/raw_cookie_writer.dart","lib/services/discourse/discourse_service.dart","lib/services/discourse/_account_switch.dart","lib/services/storage/multi_account_registry_normalizer.dart","lib/services/storage/resilient_secure_storage.dart","test/services/account_runtime_pool_test.dart","test/services/storage/multi_account_registry_normalizer_test.dart","lib/services/discourse/_auth.dart","lib/services/network/session_rejection_classifier.dart","lib/services/network/recovery/session_heal_policy.dart","test/services/discourse_account_switch_auth_test.dart","test/services/network/session_rejection_classifier_test.dart","test/services/network/recovery/session_heal_test.dart",".github/workflows/account-runtime-switch.yaml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
