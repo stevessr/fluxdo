@@ -439,7 +439,10 @@ Future<void> launchContentLink(
 
 /// Let the user choose an installed browser for an ordinary HTTP(S) URL.
 /// Returns null when the sheet is dismissed without making a selection.
-Future<bool?> openLinkWithBrowserPicker(BuildContext context, String url) async {
+Future<bool?> openLinkWithBrowserPicker(
+  BuildContext context,
+  String url,
+) async {
   final uri = Uri.tryParse(url);
   if (uri == null || !SystemBrowserService.isWebUrl(uri)) return false;
 
@@ -455,10 +458,8 @@ Future<bool?> openLinkWithBrowserPicker(BuildContext context, String url) async 
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (_) => LoginBrowserPickerSheet(
-      browsers: browsers,
-      description: null,
-    ),
+    builder: (_) =>
+        LoginBrowserPickerSheet(browsers: browsers, description: null),
   );
   if (selected == null) return null;
   return SystemBrowserService.instance.openWebLink(selected, uri);

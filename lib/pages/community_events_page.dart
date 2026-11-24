@@ -352,19 +352,33 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     final localizations = MaterialLocalizations.of(context);
     final monday = calendarWeekStart(date);
     final sunday = DateTime(monday.year, monday.month, monday.day + 6);
-    final sameMonth = monday.year == sunday.year &&
-        monday.month == sunday.month;
+    final sameMonth =
+        monday.year == sunday.year && monday.month == sunday.month;
     final weekLabel = _zh(context)
         ? sameMonth
-            ? monday.year.toString() + '年' + monday.month.toString() +
-                '月' + monday.day.toString() + '日 – ' +
-                sunday.day.toString() + '日'
-            : monday.year.toString() + '年' + monday.month.toString() +
-                '月' + monday.day.toString() + '日 – ' +
-                sunday.year.toString() + '年' + sunday.month.toString() +
-                '月' + sunday.day.toString() + '日'
-        : localizations.formatMediumDate(monday) + ' – ' +
-            localizations.formatMediumDate(sunday);
+              ? monday.year.toString() +
+                    '年' +
+                    monday.month.toString() +
+                    '月' +
+                    monday.day.toString() +
+                    '日 – ' +
+                    sunday.day.toString() +
+                    '日'
+              : monday.year.toString() +
+                    '年' +
+                    monday.month.toString() +
+                    '月' +
+                    monday.day.toString() +
+                    '日 – ' +
+                    sunday.year.toString() +
+                    '年' +
+                    sunday.month.toString() +
+                    '月' +
+                    sunday.day.toString() +
+                    '日'
+        : localizations.formatMediumDate(monday) +
+              ' – ' +
+              localizations.formatMediumDate(sunday);
     return switch (_calendarScale) {
       EventCalendarScale.day => localizations.formatMediumDate(date),
       EventCalendarScale.week => weekLabel,
@@ -393,40 +407,47 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
       borderRadius: BorderRadius.circular(5),
       constraints: const BoxConstraints(minHeight: 36, minWidth: 56),
       children: [
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 7),
-          child: Text(zh ? '所有活动' : 'All events')),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 7),
-          child: Text(zh ? '我的活动' : 'My events')),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          child: Text(zh ? '所有活动' : 'All events'),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          child: Text(zh ? '我的活动' : 'My events'),
+        ),
       ],
     );
   }
 
   Widget _calendarNavigation(BuildContext context) {
     final zh = _zh(context);
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      IconButton(
-        tooltip: zh ? '上一时间段' : 'Previous period',
-        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-        padding: EdgeInsets.zero,
-        onPressed: () => _moveCalendar(-1),
-        icon: const Icon(Icons.chevron_left),
-      ),
-      IconButton(
-        tooltip: zh ? '下一时间段' : 'Next period',
-        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-        padding: EdgeInsets.zero,
-        onPressed: () => _moveCalendar(1),
-        icon: const Icon(Icons.chevron_right),
-      ),
-      OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: zh ? '上一时间段' : 'Previous period',
+          constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+          padding: EdgeInsets.zero,
+          onPressed: () => _moveCalendar(-1),
+          icon: const Icon(Icons.chevron_left),
         ),
-        onPressed: () => _setCalendarDate(DateTime.now()),
-        child: Text(zh ? '今天' : 'Today'),
-      ),
-    ]);
+        IconButton(
+          tooltip: zh ? '下一时间段' : 'Next period',
+          constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+          padding: EdgeInsets.zero,
+          onPressed: () => _moveCalendar(1),
+          icon: const Icon(Icons.chevron_right),
+        ),
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          onPressed: () => _setCalendarDate(DateTime.now()),
+          child: Text(zh ? '今天' : 'Today'),
+        ),
+      ],
+    );
   }
 
   Widget _calendarScales(BuildContext context) {
@@ -434,8 +455,7 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
     final scheme = Theme.of(context).colorScheme;
     return ToggleButtons(
       isSelected: [
-        for (final scale in EventCalendarScale.values)
-          _calendarScale == scale,
+        for (final scale in EventCalendarScale.values) _calendarScale == scale,
       ],
       onPressed: (index) {
         final scale = EventCalendarScale.values[index];
@@ -476,21 +496,25 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Text.rich(
-              TextSpan(children: [
-                TextSpan(
-                  text: zh
-                      ? '真诚、友善、团结、专业，'
-                      : 'Sincere, friendly, united, professional. ',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextSpan(text: zh
-                    ? '共建你我引以为荣之社区。 '
-                    : 'Build a community we are proud of. '),
-                TextSpan(
-                  text: zh ? '《社区准则》' : 'Guidelines',
-                  style: TextStyle(color: scheme.primary),
-                ),
-              ]),
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: zh
+                        ? '真诚、友善、团结、专业，'
+                        : 'Sincere, friendly, united, professional. ',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(
+                    text: zh
+                        ? '共建你我引以为荣之社区。 '
+                        : 'Build a community we are proud of. ',
+                  ),
+                  TextSpan(
+                    text: zh ? '《社区准则》' : 'Guidelines',
+                    style: TextStyle(color: scheme.primary),
+                  ),
+                ],
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -501,55 +525,69 @@ class _CommunityEventsPageState extends State<CommunityEventsPage> {
   }
 
   Widget _buildCalendarControls(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final label = Text(
-        _calendarPeriodLabel(context),
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w600),
-      );
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: constraints.maxWidth >= 840
-            ? Row(children: [
-                _calendarFilters(context),
-                const SizedBox(width: 12),
-                _calendarNavigation(context),
-                Expanded(child: label),
-                _calendarScales(context),
-              ])
-            : constraints.maxWidth >= 440
-                ? Column(children: [
-                    Row(children: [
-                      _calendarFilters(context),
-                      const Spacer(),
-                      _calendarNavigation(context),
-                    ]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final label = Text(
+          _calendarPeriodLabel(context),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
+        );
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: constraints.maxWidth >= 840
+              ? Row(
+                  children: [
+                    _calendarFilters(context),
+                    const SizedBox(width: 12),
+                    _calendarNavigation(context),
+                    Expanded(child: label),
+                    _calendarScales(context),
+                  ],
+                )
+              : constraints.maxWidth >= 440
+              ? Column(
+                  children: [
+                    Row(
+                      children: [
+                        _calendarFilters(context),
+                        const Spacer(),
+                        _calendarNavigation(context),
+                      ],
+                    ),
                     const SizedBox(height: 8),
-                    Row(children: [
-                      Expanded(child: label),
-                      const SizedBox(width: 8),
-                      _calendarScales(context),
-                    ]),
-                  ])
-                : Column(children: [
+                    Row(
+                      children: [
+                        Expanded(child: label),
+                        const SizedBox(width: 8),
+                        _calendarScales(context),
+                      ],
+                    ),
+                  ],
+                )
+              : Column(
+                  children: [
                     Align(
                       alignment: Alignment.centerLeft,
                       child: _calendarFilters(context),
                     ),
                     const SizedBox(height: 8),
-                    Row(children: [
-                      _calendarNavigation(context),
-                      const Spacer(),
-                      _calendarScales(context),
-                    ]),
+                    Row(
+                      children: [
+                        _calendarNavigation(context),
+                        const Spacer(),
+                        _calendarScales(context),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     label,
-                  ]),
-      );
-    });
+                  ],
+                ),
+        );
+      },
+    );
   }
 
   @override
