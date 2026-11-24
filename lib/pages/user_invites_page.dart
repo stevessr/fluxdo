@@ -1,7 +1,8 @@
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart'
+    show UiShapesContext, InteractionPageRoute;
 import 'package:app_icons/app_icons.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../services/network/discourse_dio.dart';
 import '../utils/time_utils.dart';
@@ -136,7 +137,7 @@ class _UserInvitesPageState extends State<UserInvitesPage>
             icon: const Icon(Symbols.person_add_rounded),
             onPressed: () => Navigator.of(
               context,
-            ).push(MaterialPageRoute(builder: (_) => const InviteLinksPage())),
+            ).push(InteractionPageRoute(builder: (_) => const InviteLinksPage())),
           ),
         ],
         bottom: TabBar(

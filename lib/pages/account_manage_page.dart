@@ -1,4 +1,5 @@
-import 'package:common_ui/common_ui.dart' show UiShapesContext, UiEmphasis;
+import 'package:common_ui/common_ui.dart'
+    show UiShapesContext, UiEmphasis, InteractionPageRoute, showInteractionDialog;
 
 import 'dart:async';
 
@@ -53,7 +54,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
 
   Future<void> _switchTo(SavedAccount account) async {
     final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showInteractionDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.accountManage_switchConfirmTitle),
@@ -78,7 +79,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
 
     // 切换涉及会话恢复和全量缓存刷新，统一展示目标账号身份与进度。
     unawaited(
-      showDialog(
+      showInteractionDialog(
         context: context,
         barrierDismissible: false,
         barrierColor: Theme.of(context).colorScheme.scrim
@@ -119,7 +120,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
 
   Future<void> _removeAccount(SavedAccount account) async {
     final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showInteractionDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.accountManage_removeConfirmTitle),
@@ -162,7 +163,7 @@ class _AccountManagePageState extends ConsumerState<AccountManagePage> {
     var success = false;
     try {
       final result = await Navigator.of(context)
-          .push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
+          .push<bool>(InteractionPageRoute(builder: (_) => const LoginPage()));
       success = result == true;
     } finally {
       await _manager.completeNewLogin(success: success);

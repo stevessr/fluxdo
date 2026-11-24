@@ -1,4 +1,5 @@
-import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:common_ui/common_ui.dart'
+    show UiShapesContext, InteractionPageRoute, showInteractionDialog, showInteractionBottomSheet;
 
 import 'dart:async';
 
@@ -73,7 +74,7 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
     final user = ref.read(currentUserProvider).value;
     if (user?.canManageBoards != true) return;
     final controller = TextEditingController();
-    final name = await showDialog<String>(
+    final name = await showInteractionDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(_isZh(context) ? '新建看板' : 'New board'),
@@ -113,7 +114,7 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
       if (!mounted) return;
       _reload();
       await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) => BoardDetailPage(
             boardId: board.id,
             initialName: board.displayName,
@@ -184,7 +185,7 @@ class _BoardsPageState extends ConsumerState<BoardsPage> {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
                       final changed = await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(
+                        InteractionPageRoute(
                           builder: (_) => BoardDetailPage(
                             boardId: board.id,
                             initialName: board.displayName,
@@ -296,7 +297,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
         topic: topic,
         onOpen: () {
           Navigator.of(context).push(
-            MaterialPageRoute(
+            InteractionPageRoute(
               builder: (_) =>
                   TopicDetailPage(topicId: topic.id, initialTitle: topic.title),
             ),
@@ -306,7 +307,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       return;
     }
 
-    await showModalBottomSheet<void>(
+    await showInteractionBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -339,7 +340,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       return;
     }
 
-    final selection = await showDialog<_AssigneeSelection>(
+    final selection = await showInteractionDialog<_AssigneeSelection>(
       context: context,
       builder: (_) =>
           _BoardAssigneeDialog(initialUsername: card.assignedTo?.username),
@@ -365,7 +366,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _addColumn(DiscourseBoard board) async {
     if (!board.canManage || board.archived) return;
     final controller = TextEditingController();
-    final title = await showDialog<String>(
+    final title = await showInteractionDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(_isZh(context) ? '添加分栏' : 'Add column'),
@@ -406,7 +407,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
 
   Future<void> _addCard(DiscourseBoard board, BoardColumn column) async {
     if (!board.canWrite || board.archived) return;
-    final result = await showDialog<({String title, String notes})>(
+    final result = await showInteractionDialog<({String title, String notes})>(
       context: context,
       builder: (_) => const _BoardCardEditorDialog(),
     );
@@ -430,7 +431,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
 
   Future<void> _moveCard(DiscourseBoard board, BoardCard card) async {
     if (!board.canWrite || board.archived || board.columns.length < 2) return;
-    final destination = await showDialog<BoardColumn>(
+    final destination = await showInteractionDialog<BoardColumn>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
         title: Text(_isZh(context) ? '移动到分栏' : 'Move to column'),
@@ -456,7 +457,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
 
       if (constraintFix.isEmpty && board.requireConfirmation) {
         final confirmed =
-            await showDialog<bool>(
+            await showInteractionDialog<bool>(
               context: context,
               builder: (dialogContext) => AlertDialog(
                 title: Text(_isZh(context) ? '确认移动' : 'Confirm move'),
@@ -538,7 +539,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     final selectedTags = <String>{if (tagsNeeded.length == 1) tagsNeeded.first};
 
     if (!mounted) return null;
-    return showDialog<Map<String, dynamic>>(
+    return showInteractionDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -634,7 +635,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _editColumn(DiscourseBoard board, BoardColumn column) async {
     if (!board.canManage || board.archived) return;
     final controller = TextEditingController(text: column.displayTitle);
-    final title = await showDialog<String>(
+    final title = await showInteractionDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(_isZh(context) ? '编辑分栏' : 'Edit column'),
@@ -677,7 +678,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
 
   Future<void> _editCard(DiscourseBoard board, BoardCard card) async {
     if (!board.canWrite || board.archived || card.isTopic) return;
-    final result = await showDialog<({String title, String notes})>(
+    final result = await showInteractionDialog<({String title, String notes})>(
       context: context,
       builder: (_) => _BoardCardEditorDialog(
         initialTitle: card.displayTitle,
@@ -701,7 +702,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _deleteCard(DiscourseBoard board, BoardCard card) async {
     if (!board.canWrite || board.archived) return;
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '删除卡片' : 'Delete card'),
@@ -737,7 +738,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _clearColumn(DiscourseBoard board, BoardColumn column) async {
     if (!board.canManage || board.archived || column.cards.isEmpty) return;
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '清空分栏' : 'Clear column'),
@@ -789,7 +790,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _deleteColumn(DiscourseBoard board, BoardColumn column) async {
     if (!board.canManage || board.archived) return;
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '删除分栏' : 'Delete column'),
@@ -846,7 +847,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
     var requireConfirmation = board.requireConfirmation;
     var cardStyle = board.cardStyle;
 
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showInteractionDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -947,7 +948,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
-                      final updated = await showDialog<List<BoardAclEntry>>(
+                      final updated = await showInteractionDialog<List<BoardAclEntry>>(
                         context: context,
                         builder: (_) =>
                             _BoardAclEditorDialog(initialEntries: acl),
@@ -1088,7 +1089,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
         final warning =
             accessEvaluation['error_message']?.toString().trim() ?? '';
         final confirmed =
-            await showDialog<bool>(
+            await showInteractionDialog<bool>(
               context: context,
               builder: (dialogContext) => AlertDialog(
                 title: Text(
@@ -1127,7 +1128,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
       final cardsToRemove = (preview['cards_to_remove'] as num?)?.toInt() ?? 0;
       if (cardsToRemove > 0 && mounted) {
         final confirmed =
-            await showDialog<bool>(
+            await showInteractionDialog<bool>(
               context: context,
               builder: (dialogContext) => AlertDialog(
                 title: Text(
@@ -1179,7 +1180,7 @@ class _BoardDetailPageState extends ConsumerState<BoardDetailPage> {
   Future<void> _deleteBoard(DiscourseBoard board) async {
     if (!board.canManage) return;
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(_isZh(context) ? '删除看板' : 'Delete board'),
@@ -1766,7 +1767,7 @@ class _BoardAclEditorDialogState extends State<_BoardAclEditorDialog> {
     final nameController = TextEditingController();
     var type = 'group';
     var permission = 'view';
-    final entry = await showDialog<BoardAclEntry>(
+    final entry = await showInteractionDialog<BoardAclEntry>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(

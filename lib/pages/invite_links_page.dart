@@ -587,7 +587,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       return;
     }
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('删除邀请'),
@@ -640,7 +640,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
   Future<void> _resendAllInvites() async {
     if (_isManagingInvite) return;
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('重新发送全部邀请'),
@@ -679,7 +679,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
       text: details?.description ?? '',
     );
     final emailController = TextEditingController(text: details?.email ?? '');
-    final result = await showDialog<({String description, String email})>(
+    final result = await showInteractionDialog<({String description, String email})>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('编辑邀请'),
@@ -753,7 +753,7 @@ class _InviteLinksPageState extends ConsumerState<InviteLinksPage> {
     if (_isManagingInvite) return;
     final emailsController = TextEditingController();
     final messageController = TextEditingController();
-    final result = await showDialog<({List<String> emails, String message})>(
+    final result = await showInteractionDialog<({List<String> emails, String message})>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('批量邮件邀请'),

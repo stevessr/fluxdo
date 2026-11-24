@@ -2,7 +2,7 @@ import 'dart:collection';
 
 import 'package:app_icons/app_icons.dart';
 import 'package:common_ui/common_ui.dart'
-    show InteractionPageRoute, UiShapesContext;
+    show InteractionPageRoute, UiShapesContext, showInteractionDialog;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -187,7 +187,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
 
     final copy = _copy(context);
-    return await showDialog<bool>(
+    return await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(copy.confirmJoinTitle),
@@ -273,7 +273,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   Future<void> _showAddMembers() async {
     final group = _group;
     if (group == null || !group.canManageMembers || _adding) return;
-    final request = await showDialog<_AddMembersRequest>(
+    final request = await showInteractionDialog<_AddMembersRequest>(
       context: context,
       builder: (_) => _AddMembersDialog(groupLabel: group.label),
     );
@@ -318,7 +318,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
 
     final copy = _copy(context);
-    final reason = await showDialog<String>(
+    final reason = await showInteractionDialog<String>(
       context: context,
       builder: (dialogContext) {
         final controller = TextEditingController();
@@ -384,7 +384,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
     final copy = _copy(context);
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(copy.removeMember),
@@ -443,7 +443,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
 
     final copy = _copy(context);
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(member.owner ? copy.removeOwner : copy.makeOwner),
@@ -552,7 +552,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   Future<void> _showMembershipRequests() async {
     final group = _group;
     if (group == null || !group.canManageMembers) return;
-    await showDialog<void>(
+    await showInteractionDialog<void>(
       context: context,
       builder: (_) => _GroupMembershipRequestsDialog(
         groupLabel: group.label,
