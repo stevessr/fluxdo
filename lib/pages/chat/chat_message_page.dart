@@ -1105,7 +1105,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               color: theme.colorScheme.primaryContainer
                                   .withValues(alpha: 0.8),
                               shape: context.shapes.circle(),
-                              ),
+                            ),
                             child: Icon(
                               Icons.add_rounded,
                               color: theme.colorScheme.onPrimaryContainer,
@@ -1137,7 +1137,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       showAppBottomSheet(
         context: context,
         shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
+          borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
         ),
         builder: (ctx) => SafeArea(
           child: Column(
@@ -1223,7 +1223,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                           )
                                           .toggleReaction(message.id, emoji);
                                     },
-                                    borderRadius: context.shapes.borderRadius(24),
+                                    borderRadius: context.shapes.borderRadius(
+                                      24,
+                                    ),
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
@@ -3326,14 +3328,16 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                           color: isOwnMessage
                               ? theme.colorScheme.primaryContainer
                               : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: context.shapes.borderRadius(16).copyWith(
-                            bottomLeft: isOwnMessage
-                                ? context.shapes.radius(16)
-                                : context.shapes.radius(4),
-                            bottomRight: isOwnMessage
-                                ? context.shapes.radius(4)
-                                : context.shapes.radius(16),
-                          ),
+                          borderRadius: context.shapes
+                              .borderRadius(16)
+                              .copyWith(
+                                bottomLeft: isOwnMessage
+                                    ? context.shapes.radius(16)
+                                    : context.shapes.radius(4),
+                                bottomRight: isOwnMessage
+                                    ? context.shapes.radius(4)
+                                    : context.shapes.radius(16),
+                              ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3361,7 +3365,8 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                         );
                                       },
                                       child: ClipRRect(
-                                        borderRadius: context.shapes.borderRadius(8),
+                                        borderRadius: context.shapes
+                                            .borderRadius(8),
                                         child: CachedImage(
                                           url: url,
                                           width: 180,
@@ -3592,7 +3597,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                                 .withValues(alpha: 0.5),
                                       width: 1,
                                     ),
-                                    borderRadius: context.shapes.borderRadius(12),
+                                    borderRadius: context.shapes.borderRadius(
+                                      12,
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,

@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute;
+import 'package:common_ui/common_ui.dart'
+    show UiShapesContext, InteractionPageRoute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
@@ -587,7 +588,9 @@ class _AddChannelMemberDialogState
     final theme = Theme.of(context);
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: context.shapes.borderRadius(16),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400, maxHeight: 480),
         child: Column(

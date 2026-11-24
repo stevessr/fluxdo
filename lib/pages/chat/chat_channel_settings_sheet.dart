@@ -1,4 +1,5 @@
 import 'package:common_ui/common_ui.dart' show UiShapesContext;
+
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -239,7 +240,9 @@ class _ChatChannelSettingsSheetState
                 context: ctx,
                 isScrollControlled: true,
                 shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
+                  borderRadius: BorderRadius.vertical(
+                    top: context.shapes.radius(16),
+                  ),
                 ),
                 builder: (sheetCtx) => SizedBox(
                   height: MediaQuery.of(sheetCtx).size.height * 0.45,
