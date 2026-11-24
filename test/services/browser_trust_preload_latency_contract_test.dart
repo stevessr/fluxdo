@@ -25,7 +25,10 @@ void main() {
     expect(webViewFallback, greaterThan(nativeProbe));
     expect(
       body,
-      contains('if (!_clearanceRecentlyRejected || proactiveVerified)'),
+      contains(
+        'if (!WebViewAdapterSettingsService.instance.effectiveEnabled &&\n'
+        '        (!_clearanceRecentlyRejected || proactiveVerified))',
+      ),
     );
     expect(body, isNot(contains('_isNativePreloadTrusted')));
   });
