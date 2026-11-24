@@ -3,8 +3,9 @@ name: Network regression
 on:
   pull_request:
     branches: [dev, main]
+  # main is validated by pull_request before merge; retain direct dev checks.
   push:
-    branches: [dev, main]
+    branches: [dev]
   workflow_dispatch:
     inputs:
       platforms:
