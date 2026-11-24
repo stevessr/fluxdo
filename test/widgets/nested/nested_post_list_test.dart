@@ -80,6 +80,7 @@ Future<void> _pump(
   NestedReadingSession? session,
   NestedReadingPosition? restore,
   AutoScrollController? controller,
+  NestedPostListController? navigationController,
   _Nested? notifier,
 }) async {
   SharedPreferences.setMockInitialValues({});
@@ -131,6 +132,7 @@ Future<void> _pump(
             child: Scaffold(
               body: Consumer(
                 builder: (context, ref, _) => NestedPostList(
+                  controller: navigationController,
                   nestedState:
                       ref
                           .watch(
@@ -455,10 +457,13 @@ void main() {
 
   testWidgets('屏外的已加载回复不提前上报，长分支可跳到下一条主回复', (tester) async {
     final scroll = AutoScrollController();
+    final navigation = NestedPostListController();
+    addTearDown(navigation.dispose);
     Set<int> visible = {};
     await _pump(
       tester,
       controller: scroll,
+      navigationController: navigation,
       onVisible: (posts) => visible = posts,
       state: NestedTopicState(
         roots: [
@@ -466,14 +471,16 @@ void main() {
             post: _post(2, long: true),
             children: [NestedNode(post: _post(20))],
           ),
-          NestedNode(post: _post(3)),
+          NestedNode(post: _post(3, long: true)),
         ],
       ),
     );
     expect(visible, {2});
-    await tester.tap(find.byTooltip('下一条主回复'));
+    expect(navigation.value, isNotNull);
+    navigation.value!();
     await tester.pumpAndSettle();
     expect(visible.contains(3), isTrue);
+    expect(navigation.value, isNull);
     expect(tester.takeException(), isNull);
   });
 
@@ -504,6 +511,36 @@ void main() {
     expect(session.position?.offset, closeTo(-240, 1));
     expect(tester.takeException(), isNull);
   });
+  testWidgets('返回上下文时恢复实际阅读的子回复与楼内偏移', (tester) async {
+    final session = NestedReadingSession();
+    await _pump(
+      tester,
+      session: session,
+      restore: const NestedReadingPosition(
+        postNumber: 21,
+        rootPostNumber: 2,
+        offset: -180,
+        expanded: {2: true, 20: true},
+      ),
+      state: NestedTopicState(
+        contextMode: true,
+        targetPostNumber: 20,
+        contextChain: NestedNode(
+          post: _post(2),
+          children: [
+            NestedNode(
+              post: _post(20),
+              children: [NestedNode(post: _post(21, long: true))],
+            ),
+          ],
+        ),
+      ),
+    );
+    expect(session.position?.postNumber, 21);
+    expect(session.position?.offset, closeTo(-180, 1));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('长分支先展示少量回复，主动展开后显示其余回复', (tester) async {
     final state = NestedTopicState(
       roots: [
