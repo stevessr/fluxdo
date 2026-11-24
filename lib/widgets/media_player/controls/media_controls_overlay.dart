@@ -3,7 +3,7 @@ import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import 'package:video_player/video_player.dart';
 
@@ -1001,7 +1001,7 @@ class _CompactIconButton extends StatelessWidget {
       child: SizedBox(
         width: 36,
         height: 36,
-        child: IconTheme(
+        child: IconTheme.merge(
           data: IconThemeData(color: MediaOverlayStyle.foreground, size: size),
           child: Center(child: icon),
         ),

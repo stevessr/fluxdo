@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:app_icons/app_icons.dart';
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -228,13 +228,17 @@ class _Harness {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const safeAreaChannel = MethodChannel('com.fluxdo/browser_safe_area');
+  // 原生缩小绘制通道：测试里没有原生实例，按「拿不到」退回插件截图
+  const surfaceChannel = MethodChannel('com.fluxdo/webview_surface');
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(safeAreaChannel, (_) async => true);
+      ..setMockMethodCallHandler(safeAreaChannel, (_) async => true)
+      ..setMockMethodCallHandler(surfaceChannel, (_) async => null);
   });
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(safeAreaChannel, null);
+      ..setMockMethodCallHandler(safeAreaChannel, null)
+      ..setMockMethodCallHandler(surfaceChannel, null);
   });
   setUpAll(() async {
     final directory = await Directory(

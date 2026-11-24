@@ -33,9 +33,13 @@ import 'package:flutter/foundation.dart'
         kDebugMode,
         listEquals,
         visibleForTesting;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:common_ui/common_ui.dart'
-    show showInteractionDialog, UiShapesContext, UiEmphasisContext;
+    show
+        showInteractionDialog,
+        SwipeDismissiblePopupMenuButton,
+        UiShapesContext,
+        UiEmphasisContext;
 import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:fluxdo_render/editor.dart';
@@ -68,6 +72,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'
 
 import '../../../constants.dart';
 import '../../../l10n/s.dart';
+import '../ai_content_block.dart';
 import '../../../providers/preferences_provider.dart';
 import '../../../services/discourse_cache_manager.dart';
 import '../../../models/mention_user.dart';
@@ -76,6 +81,7 @@ import '../../../services/discourse/discourse_service.dart';
 import '../../../services/discourse_cook_service.dart';
 import '../../../services/emoji_alias_service.dart';
 import '../../../services/emoji_handler.dart';
+import '../../../services/external_plugin_service.dart';
 import '../../../utils/clipboard_image_native.dart';
 import '../../../utils/dialog_utils.dart';
 import '../../../utils/fluxdo_render_callbacks.dart';
@@ -86,21 +92,22 @@ import '../../common/fading_edge_scroll_view.dart';
 import '../../common/smart_avatar.dart';
 import '../../content/discourse_html_content/image_utils.dart';
 import '../../mention/mention_autocomplete.dart';
+import '../../mention/mention_candidate_list.dart';
 import '../composer_workbench.dart';
 import '../composer_table_panel.dart';
 import '../composer_anchored_panel.dart';
+import '../composer_tool_style.dart';
 import '../composer_object_toolbar.dart';
 import '../composer_object_surface.dart';
 import '../composer_block_picker.dart';
 import '../composer_block_hover.dart';
 import '../composer_object_controller.dart';
 import '../composer_object_pointer_region.dart';
+import '../composer_desktop_layout.dart';
 import '../composer_desktop_workbench.dart';
 import '../composer_tools_panel.dart';
 import '../composer_quick_panel.dart';
 import '../composer_tools_anchor.dart';
-import '../composer_tool_style.dart';
-import '../composer_desktop_layout.dart';
 import '../composer_view_mode_switcher.dart';
 import '../content_actions_button.dart';
 import '../content_actions_providers.dart';
@@ -108,10 +115,10 @@ import '../emoji_popover.dart';
 import '../emoji_sticker_panel.dart';
 import '../image_upload_dialog.dart';
 import '../long_image_upload_dialog.dart';
+import '../color_insert_dialog.dart';
 import '../uploads/task_controller.dart';
 import '../uploads/upload_task_panel.dart';
 import '../link_insert_dialog.dart';
-import '../color_insert_dialog.dart';
 import '../poll_builder_dialog.dart';
 import '../template_insert_dialog.dart';
 import '../composer_shortcuts.dart' show composerShortcutHint;
@@ -793,9 +800,13 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       _emojiPopover = EmojiPopoverController()
         ..addListener(_onEmojiPopoverChanged);
     }
-    _editorAreaFocus.addListener(_onEditorAreaFocusChanged);
     if (kDebugMode) EditorImeClient.debugLogging = true;
     _importInitial();
+  }
+
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted || _documentReplaced || _editor == null) return;
+    unawaited(_insertGeneratedImage(image));
   }
 
   /// 弹层开合同步 _showEmojiPanel(驱动工具栏表情按钮高亮)
@@ -903,16 +914,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     _objectSelection.dispose();
     _tableContext.dispose();
     if (_ownsFocus) _editorFocus.dispose();
-    _editorAreaFocus.removeListener(_onEditorAreaFocusChanged);
     _editorAreaFocus.dispose();
     _scrollController.dispose();
     _editor?.removeListener(_onDocChanged);
     _session?.dispose();
     super.dispose();
-  }
-
-  void _onEditorAreaFocusChanged() {
-    if (mounted) setState(() {});
   }
 
   /// 预览返回时恢复输入连接；关闭面板留下的只读状态不能带回来。
@@ -923,8 +929,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       SystemChannels.textInput.invokeMethod('TextInput.show');
     }
   }
-
-  Widget _buildIntendedPanel() => _buildEmojiPanel();
 
   void _switchToSource() {
     if (hasPendingUploads) {
@@ -976,6 +980,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       action();
     }
 
+    void togglePin(String id) {
+      final ids = List<String>.of(_richVisibleToolIds);
+      if (!ids.remove(id)) ids.add(id);
+      container.read(preferencesProvider.notifier).setRichToolbarTools(ids);
+    }
+
     try {
       final actions = <ComposerToolAction>[
         ComposerToolAction(
@@ -1009,19 +1019,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                 : ComposerToolGroup.format,
             shortcut: composerShortcutHint(tool.id),
             active: tool.isActive?.call(snapshot) ?? false,
-            isPinned: () => container
-                .read(preferencesProvider)
-                .richToolbarTools
-                .contains(tool.id),
-            togglePinned: () {
-              final ids = List<String>.of(
-                container.read(preferencesProvider).richToolbarTools,
-              );
-              if (!ids.remove(tool.id)) ids.add(tool.id);
-              container
-                  .read(preferencesProvider.notifier)
-                  .setRichToolbarTools(ids);
-            },
+            isPinned: () => _richVisibleToolIds.contains(tool.id),
+            togglePinned: () => togglePin(tool.id),
             run: () => run(() => tool.run(toolContext)),
           ),
         for (final action in _buildInsertActions())
@@ -1031,21 +1030,21 @@ class RichComposerEditorState extends State<RichComposerEditor> {
             icon: action.icon,
             searchText: action.searchText,
             group: ComposerToolGroup.insert,
-            isPinned: () => container
-                .read(preferencesProvider)
-                .richToolbarTools
-                .contains('insert:${action.searchText}'),
-            togglePinned: () {
-              final ids = List<String>.of(
-                container.read(preferencesProvider).richToolbarTools,
-              );
-              final id = 'insert:${action.searchText}';
-              if (!ids.remove(id)) ids.add(id);
-              container
-                  .read(preferencesProvider.notifier)
-                  .setRichToolbarTools(ids);
-            },
+            isPinned: () =>
+                _richVisibleToolIds.contains('insert:${action.searchText}'),
+            togglePinned: () => togglePin('insert:${action.searchText}'),
             run: () => run(action.run),
+            children: [
+              for (final child in action.children)
+                ComposerToolAction(
+                  id: 'insert:${child.searchText}',
+                  label: child.label,
+                  icon: child.icon,
+                  searchText: child.searchText,
+                  group: child.group,
+                  run: () => run(child.run),
+                ),
+            ],
           ),
         if (widget.onSwitchToSource != null)
           ComposerToolAction(
@@ -1066,7 +1065,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
               context,
               actions,
               anchor: _toolsAnchor,
-              pinnedIds: container.read(preferencesProvider).richToolbarTools,
+              pinnedIds: _richVisibleToolIds,
             );
       if (!executed &&
           mounted &&
@@ -1159,6 +1158,13 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     // 空文档判定含块类型:'- ' 转成空列表项/'# ' 转成空标题/包了容器
     // 都不算空 —— 否则 hint 与列表圆点/标题光标叠画(实测截图)。
     return b.content.length == 0 && b.isParagraph && b.containers.isEmpty;
+  }
+
+  /// 导入期间尚未产生编辑，关闭可沿用原文；已有文档必须先回写最新内容。
+  /// 提交和切换视图仍使用 flushToController，等待导入及校验完成。
+  bool prepareToClose() {
+    if (_importing && !_documentReplaced && _rawMirror.isCurrent) return true;
+    return flushToController();
   }
 
   /// 立即序列化(宿主提交前调用,确保 controller 是最新;镜像 debounce
@@ -1358,8 +1364,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   }
 
   /// 候选:(关键字集, 标签, 图标, 动作)。关键字含中文与英文别名。
-  late final List<(List<String>, String, IconData, Future<void> Function())>
-  _blockCommands = [
+  List<(List<String>, String, IconData, Future<void> Function())>
+  get _blockCommands => [
     (
       ['paragraph', 'text', '正文', '段落'],
       '正文',
@@ -1421,6 +1427,13 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       Icons.code_rounded,
       () async => insertMarkdownSnippet('```dart\n// 代码\n```'),
     ),
+    for (final block in AiContentBlock.available)
+      (
+        ['ai-${block.name}', 'ai', block.name],
+        block.label(context.l10n),
+        block.icon,
+        () => _insertAiContent(block),
+      ),
     (
       ['math', '公式', 'gs'],
       '公式块',
@@ -1460,12 +1473,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       '上传图片',
       Icons.image_outlined,
       () async => _pickAndUploadImages(),
-    ),
-    (
-      ['longimage', '长图', '切图', 'ct'],
-      '长图上传',
-      Icons.content_cut_rounded,
-      () async => _pickAndUploadLongImage(),
     ),
     (
       ['callout', '标注', 'bz', 'note'],
@@ -1655,16 +1662,10 @@ class RichComposerEditorState extends State<RichComposerEditor> {
           final above = caret.top - safeTop;
           if (below >= menuMaxHeight + 16 || below >= above) {
             top = caret.bottom + 4;
-            menuMaxHeight = menuMaxHeight.clamp(
-              120.0,
-              (below - 12).clamp(120.0, 220.0),
-            );
+            menuMaxHeight = (below - 12).clamp(0.0, 220.0);
           } else {
             bottom = screen.height - caret.top + 4;
-            menuMaxHeight = menuMaxHeight.clamp(
-              120.0,
-              (above - 12).clamp(120.0, 220.0),
-            );
+            menuMaxHeight = (above - 12).clamp(0.0, 220.0);
           }
         } else {
           left = 16;
@@ -1677,18 +1678,17 @@ class RichComposerEditorState extends State<RichComposerEditor> {
           width: menuWidth,
           child: _FloatingPanel(
             maxHeight: menuMaxHeight,
-            child: ListView.builder(
-              shrinkWrap: true,
+            child: MentionCandidateList(
+              selectedIndex: _mentionSelected,
               padding: const EdgeInsets.all(4),
-              itemCount: _mentionCandidates.length,
-              itemBuilder: (context, i) {
-                final user = _mentionCandidates[i];
-                return _MentionRow(
-                  user: user,
-                  selected: i == _mentionSelected,
-                  onTap: () => _insertMention(user),
-                );
-              },
+              children: [
+                for (final (index, user) in _mentionCandidates.indexed)
+                  _MentionRow(
+                    user: user,
+                    selected: index == _mentionSelected,
+                    onTap: () => _insertMention(user),
+                  ),
+              ],
             ),
           ),
         );
@@ -1750,7 +1750,9 @@ class RichComposerEditorState extends State<RichComposerEditor> {
 
   void _subscribePrefs() {
     final container = ProviderScope.containerOf(context, listen: false);
-    _richVisibleToolIds = container.read(preferencesProvider).richToolbarTools;
+    _richVisibleToolIds = normalizeRichToolbarTools(
+      container.read(preferencesProvider).richToolbarTools,
+    );
     _prefsSub?.close();
     _prefsSub = container.listen<AppPreferences>(preferencesProvider, (
       prev,
@@ -1758,7 +1760,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     ) {
       if (!mounted) return;
       if (!listEquals(prev?.richToolbarTools, next.richToolbarTools)) {
-        setState(() => _richVisibleToolIds = next.richToolbarTools);
+        setState(
+          () => _richVisibleToolIds = normalizeRichToolbarTools(
+            next.richToolbarTools,
+          ),
+        );
       }
     });
   }
@@ -2057,6 +2063,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 表情面板开关(MarkdownEditor._togglePanel 同构:移动端经
   /// ChatBottomPanelContainer 与键盘等高互切零跳变;桌面走悬浮弹层)。
   void _toggleEmojiPanel() {
+    _toolsAnchor.dismiss();
     // 桌面端:悬浮弹层,不收 IME、焦点/光标原地不动;
     // _showEmojiPanel 由 popover listener 同步(驱动按钮高亮)
     if (_isDesktop) {
@@ -2107,6 +2114,44 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     final value = await showColorInsertDialog(context);
     if (!mounted || value == null || editor != _editor) return;
     editor.applyTextColor(value);
+  }
+
+  /// 独立长图上传:单选图片,通过宽高比检查后选择切片数量再入队上传。
+  Future<void> _pickAndUploadLongImage() async {
+    final editor = _editor;
+    if (editor == null) return;
+    final bookmark = InsertionBookmark(editor);
+    try {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (image == null || !mounted || !identical(editor, _editor)) return;
+
+      final results = await showLongImageUploadDialog(
+        context,
+        imagePath: image.path,
+        imageName: image.name,
+      );
+      if (results == null ||
+          results.isEmpty ||
+          !mounted ||
+          !identical(editor, _editor) ||
+          !bookmark.valid) {
+        return;
+      }
+
+      for (final image in results) {
+        _queueUpload(
+          image.path,
+          image.originalName,
+          image: true,
+          insertionSelection: bookmark.selection,
+        );
+        bookmark.moveTo(editor.selection);
+      }
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    } finally {
+      bookmark.dispose();
+    }
   }
 
   /// 光标状态快照，驱动工具格子/按钮的激活态。
@@ -2175,6 +2220,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 构建(或复用)EmojiStickerPanel 缓存实例,docked 与桌面悬浮弹层共用
   Widget _ensureEmojiPanelChild() {
     _emojiPanelChild ??= EmojiStickerPanel(
+      onGeneratedImage: _onPluginImageAvailable,
       // 桌面悬浮弹层:搜索走内联视图,布局按小窗收紧;
       // 面板内开 Navigator 层 sheet(表情包市场)前先收弹层
       inlineSearch: _isDesktop,
@@ -2427,44 +2473,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     }
   }
 
-  /// 独立长图上传：只选一张，宽高比校验通过后由用户选择切片数量。
-  Future<void> _pickAndUploadLongImage() async {
-    final editor = _editor;
-    if (editor == null) return;
-    final bookmark = InsertionBookmark(editor);
-    try {
-      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
-      if (image == null || !mounted || !identical(editor, _editor)) return;
-
-      final results = await showLongImageUploadDialog(
-        context,
-        imagePath: image.path,
-        imageName: image.name,
-      );
-      if (results == null ||
-          results.isEmpty ||
-          !mounted ||
-          !identical(editor, _editor) ||
-          !bookmark.valid) {
-        return;
-      }
-
-      for (final image in results) {
-        _queueUpload(
-          image.path,
-          image.originalName,
-          image: true,
-          insertionSelection: bookmark.selection,
-        );
-        bookmark.moveTo(editor.selection);
-      }
-    } catch (e, s) {
-      AppErrorHandler.handleUnexpected(e, s);
-    } finally {
-      bookmark.dispose();
-    }
-  }
-
   int _uploadingCount = 0;
   final Set<String> _addingImageGrids = {};
 
@@ -2475,10 +2483,9 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     if (editor == null) return;
     final bookmark = InsertionBookmark(editor);
     try {
-      final picked = await FilePicker.platform.pickFiles(
+      final file = await FilePicker.pickFile(
         type: isAudio ? FileType.audio : FileType.video,
       );
-      final file = picked?.files.single;
       final path = file?.path;
       if (file == null || path == null || !mounted) return;
       setState(() => _uploadingCount++);
@@ -2518,11 +2525,10 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       // 白名单从站点配置动态派生(staff 名单叠加);null = 站点通配或
       // 配置未加载,不设限让服务端裁决。
       final allowed = attachmentAllowedExtensions();
-      final picked = await FilePicker.platform.pickFiles(
+      final file = await FilePicker.pickFile(
         type: allowed == null ? FileType.any : FileType.custom,
         allowedExtensions: allowed,
       );
-      final file = picked?.files.single;
       final path = file?.path;
       if (file == null || path == null || !mounted) return;
       if (!bookmark.valid || !identical(editor, _editor)) return;
@@ -2615,6 +2621,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     await insertMarkdownSnippet('[${text.isEmpty ? url : text}]($url)');
   }
 
+  Future<void> _insertAiContent(AiContentBlock block) {
+    final selected = _editor?.copySelectionAsMarkdown() ?? '';
+    return insertMarkdownSnippet(block.markdown(context.l10n, selected));
+  }
+
   /// "+"插入菜单:每项 = 一段模板 markdown(经 cook 变成对应块类型)。
   /// 覆盖编辑白名单外的全部常用块 —— 验证任何类型不再需要手写语法。
   List<ComposerToolAction> _buildInsertActions() {
@@ -2652,6 +2663,23 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       'quote',
     ];
     return [
+      ComposerToolAction(
+        group: ComposerToolGroup.insert,
+        label: context.l10n.editor_aiContent,
+        icon: const Icon(Icons.auto_awesome_outlined),
+        searchText: 'ai content',
+        run: () {},
+        children: [
+          for (final block in AiContentBlock.available)
+            ComposerToolAction(
+              group: ComposerToolGroup.insert,
+              label: block.label(context.l10n),
+              icon: Icon(block.icon),
+              searchText: 'ai ${block.name}',
+              run: () => _insertAiContent(block),
+            ),
+        ],
+      ),
       for (var i = 0; i < entries.length; i++)
         ComposerToolAction(
           group: ComposerToolGroup.insert,
@@ -2711,13 +2739,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       ),
       ComposerToolAction(
         group: ComposerToolGroup.insert,
-        label: '长图上传',
-        icon: const Icon(Icons.content_cut_rounded),
-        searchText: 'long image split',
-        run: () => _runInsertAction('__long_image__'),
-      ),
-      ComposerToolAction(
-        group: ComposerToolGroup.insert,
         label: '上传文件',
         icon: const Icon(Icons.attach_file_rounded),
         searchText: 'file attachment',
@@ -2756,8 +2777,6 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       await _recordAndInsertVoice();
     } else if (selected == '__file__') {
       await _pickAndInsertFile();
-    } else if (selected == '__long_image__') {
-      await _pickAndUploadLongImage();
     } else if (selected == '__callout__') {
       await _insertCallout();
     } else if (selected == '__link__') {
@@ -2982,6 +3001,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         id: island.node.id,
         code: code,
         language: language,
+        aiGenerated: (island.node as CodeBlockNode).aiGenerated,
         rawHtml: (island.node as CodeBlockNode).rawHtml,
         rawMarkdown: (island.node as CodeBlockNode).rawMarkdown,
       ),
@@ -3065,6 +3085,38 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       }
     }
     return false;
+  }
+
+  /// Generator Insert goes directly into the editor's resumable upload queue.
+  /// Ordinary clipboard images still use the confirmation dialog below.
+  Future<void> _insertGeneratedImage(GeneratedPluginImage image) async {
+    final editor = _editor;
+    if (editor == null) return;
+    final bookmark = InsertionBookmark(editor);
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File(p.join(
+        directory.path,
+        '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+      ));
+      await file.writeAsBytes(image.bytes);
+      if (!mounted ||
+          _documentReplaced ||
+          !identical(editor, _editor) ||
+          !bookmark.valid) {
+        return;
+      }
+      _queueUpload(
+        file.path,
+        image.fileName,
+        image: true,
+        insertionSelection: bookmark.selection,
+      );
+    } catch (error, stackTrace) {
+      AppErrorHandler.handleUnexpected(error, stackTrace);
+    } finally {
+      bookmark.dispose();
+    }
   }
 
   /// 粘贴位图上传:临时文件 → 确认框(与选图插入同 UX,可改名/取消误粘)
@@ -3443,7 +3495,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   }
 
   List<ComposerBlockChoice> _blockChoices({required bool transformOnly}) {
-    const order = [
+    final order = [
       'paragraph',
       'h1',
       'h2',
@@ -3457,6 +3509,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       'code',
       'hr',
       'details',
+      for (final block in AiContentBlock.values) 'ai-${block.name}',
       'callout',
       'spoiler',
       'math',
@@ -3744,7 +3797,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     if (text == null || text == frame.summary || !mounted) return;
     editor.updateContainerFrame(
       frame.groupId,
-      DetailsFrame(groupId: frame.groupId, summary: text, open: frame.open),
+      DetailsFrame(groupId: frame.groupId, summary: text, open: frame.open, aiGenerated: frame.aiGenerated),
     );
   }
 
@@ -4294,7 +4347,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
           // 表情面板意图保持中,无论容器报什么态都续显面板
           if (_intendedPanel != _RichPanelType.none &&
               panelType != ChatBottomPanelType.other) {
-            return ColoredBox(color: surface, child: _buildIntendedPanel());
+            return ColoredBox(color: surface, child: _buildEmojiPanel());
           }
           switch (panelType) {
             case ChatBottomPanelType.keyboard:
@@ -4718,6 +4771,21 @@ class _RichToolbarState extends State<_RichToolbar> {
       data: const IconThemeData(size: 20),
       child: action.icon,
     );
+    if (action.children.isNotEmpty) {
+      return SwipeDismissiblePopupMenuButton<ComposerToolAction>(
+        icon: icon,
+        tooltip: action.label,
+        itemBuilder: (_) => [
+          for (final child in action.children)
+            PopupMenuItem(value: child, child: Text(child.label)),
+        ],
+        onSelected: (child) =>
+            anchored ? child.run() : _desktopAction(child.run),
+        padding: EdgeInsets.zero,
+        iconSize: 20,
+        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+      );
+    }
     final button = IconButton(
       tooltip: action.label,
       icon: icon,

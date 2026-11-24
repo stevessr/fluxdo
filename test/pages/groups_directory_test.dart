@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;
+import 'package:flutter_localizations/flutter_localizations.dart' show GlobalWidgetsLocalizations;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/pages/groups_page.dart';
@@ -268,15 +269,22 @@ void main() {
         child: const MaterialApp(home: GroupsPage()),
       ),
     );
-    await tester.pump();
+    // Dio schedules interceptor work asynchronously; wait for the first
+    // request to start without settling its deliberately blocked response.
+    for (var i = 0; i < 50 && requestedTypes.isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
     expect(requestedTypes, [null]);
 
     await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-filter-my')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-type-filter')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.byKey(const ValueKey('groups-filter-public')));
     await tester.pump();
 

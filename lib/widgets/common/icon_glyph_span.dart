@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:app_icons/app_icons.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// 图标内联进段落:WidgetSpan 行中线对齐的单字形 Text。
 ///
@@ -38,14 +39,7 @@ InlineSpan iconGlyphSpan(
         color: color,
         letterSpacing: gap,
         height: 1.0,
-        fontVariations: <FontVariation>[
-          if (iconTheme.fill != null) FontVariation('FILL', iconTheme.fill!),
-          if (iconTheme.weight != null)
-            FontVariation('wght', iconTheme.weight!),
-          if (iconTheme.grade != null) FontVariation('GRAD', iconTheme.grade!),
-          if (iconTheme.opticalSize != null)
-            FontVariation('opsz', iconTheme.opticalSize!),
-        ],
+        fontVariations: appIconFontVariations(iconTheme),
       ),
     ),
   );

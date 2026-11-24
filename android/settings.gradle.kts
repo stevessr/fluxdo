@@ -19,8 +19,8 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.11.1" apply false
-    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    id("com.android.application") version "9.3.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.4.20" apply false
     id("com.google.gms.google-services") version "4.4.2" apply false
     id("com.google.firebase.crashlytics") version "3.0.3" apply false
 }
@@ -30,8 +30,7 @@ buildCache {
     local {
         isEnabled = true
         directory = file("${System.getProperty("user.home")}/.gradle/caches/build-cache")
-        // 限制缓存大小，防止无限增长
-        removeUnusedEntriesAfterDays = 7
+        // Gradle 9 uses its own cache cleanup policy.
     }
 }
 

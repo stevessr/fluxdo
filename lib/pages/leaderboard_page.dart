@@ -1,8 +1,15 @@
+import 'package:common_ui/common_ui.dart'
+    show
+        InteractionPageRoute,
+        showInteractionDialog,
+        UiShapesContext,
+        UiEmphasisContext;
+
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -184,7 +191,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
 
   void _openUser(_LeaderboardEntry entry) {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => UserProfilePage(username: entry.username),
       ),
     );
@@ -214,7 +221,6 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
     final snapshot = _cache[_period];
     final error = _errors[_period];
     final currentUsername = ref.watch(currentUserProvider).value?.username;
-    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -243,7 +249,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                 ),
                 IconButton(
                   tooltip: _copy(context).about,
-                  onPressed: () => showDialog<void>(
+                  onPressed: () => showInteractionDialog<void>(
                     context: context,
                     builder: (dialogContext) => AlertDialog(
                       title: Text(_copy(context).globalTitle),
@@ -259,7 +265,7 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                       ],
                     ),
                   ),
-                  icon: Icon(AppIcons.info, color: colors.primary),
+                  icon: Icon(AppIcons.info, color: context.emphasis.accent),
                 ),
               ],
             ),
@@ -479,7 +485,11 @@ class _PeriodSelector extends StatelessWidget {
                       ),
                     ),
                     if (period == selected)
-                      Icon(AppIcons.check, size: 18, color: colors.primary),
+                      Icon(
+                        AppIcons.check,
+                        size: 18,
+                        color: context.emphasis.selected,
+                      ),
                   ],
                 ),
               );
@@ -534,7 +544,7 @@ class _LeaderboardPodium extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 20, 8, 22),
       decoration: BoxDecoration(
         color: colors.primaryContainer.withValues(alpha: 0.30),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: context.shapes.borderRadius(24),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -591,7 +601,7 @@ class _LeaderboardWinner extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: context.shapes.borderRadius(16),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2),
         child: Column(
@@ -687,7 +697,6 @@ class _LeaderboardRankingHeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Row(
@@ -696,7 +705,7 @@ class _LeaderboardRankingHeading extends StatelessWidget {
           Text(copy.rank, style: theme.textTheme.titleSmall),
           Row(
             children: [
-              Icon(AppIcons.medal, size: 18, color: colors.primary),
+              Icon(AppIcons.medal, size: 18, color: context.emphasis.accent),
               const SizedBox(width: 6),
               Text(copy.points, style: theme.textTheme.titleSmall),
             ],
@@ -723,7 +732,7 @@ class _PersonalLeaderboardRank extends StatelessWidget {
 
     return Material(
       color: colors.primary,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: context.shapes.borderRadius(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -795,7 +804,7 @@ class _LeaderboardTile extends StatelessWidget {
       color: isCurrentUser
           ? colors.secondaryContainer.withValues(alpha: 0.45)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: context.shapes.borderRadius(12),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
         onTap: onTap,
@@ -810,7 +819,7 @@ class _LeaderboardTile extends StatelessWidget {
                     ? Icon(
                         Symbols.emoji_events_rounded,
                         size: 22,
-                        color: colors.primary,
+                        color: context.emphasis.accent,
                       )
                     : Text(
                         '#${entry.position}',

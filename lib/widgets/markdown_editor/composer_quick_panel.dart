@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/s.dart';
@@ -284,7 +284,7 @@ class _ComposerQuickPanelState extends State<_ComposerQuickPanel> {
                                   selected: index == _selected,
                                   selectedTileColor: colors.primaryContainer
                                       .withValues(alpha: .4),
-                                  leading: IconTheme(
+                                  leading: IconTheme.merge(
                                     data: IconThemeData(
                                       size: 20,
                                       color: action.enabled

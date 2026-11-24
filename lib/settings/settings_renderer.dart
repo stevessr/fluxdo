@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
@@ -56,7 +56,7 @@ class SettingsRenderer extends ConsumerWidget {
       secondary: Icon(
         m.icon,
         color: value
-            ? theme.colorScheme.primary
+            ? context.emphasis.selected
             : theme.colorScheme.onSurfaceVariant,
       ),
       value: value,

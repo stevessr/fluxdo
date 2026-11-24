@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 
@@ -63,7 +63,12 @@ class _DohDetailSettingsPageState extends State<DohDetailSettingsPage> {
                   SwitchListTile(
                     title: Text(context.l10n.dohDetail_ipv6Prefer),
                     subtitle: Text(context.l10n.dohDetail_ipv6PreferDesc),
-                    secondary: const Icon(Symbols.language_rounded),
+                    secondary: Icon(
+                      Symbols.language_rounded,
+                      color: settings.preferIPv6
+                          ? context.emphasis.selected
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
                     value: settings.preferIPv6,
                     onChanged: (value) => _service.setPreferIPv6(value),
                   ),

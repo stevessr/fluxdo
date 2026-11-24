@@ -4,7 +4,17 @@ on:
   pull_request:
     paths:
       - 'lib/providers/preferences_provider.dart'
+      - 'lib/services/display_refresh_service.dart'
+      - 'lib/settings/definitions/appearance_defs.dart'
+      - 'lib/settings/definitions/appearance_layout.dart'
+      - 'lib/pages/reading_settings_page.dart'
+      - 'test/services/display_refresh_service_test.dart'
       - 'lib/services/emoji_handler.dart'
+      - 'lib/services/fonts/emoji_font_service.dart'
+      - 'test/services/emoji_font_coverage_test.dart'
+      - 'lib/services/fonts/offline_resource_pack.dart'
+      - 'lib/services/fonts/font_download_service.dart'
+      - 'test/services/fonts/offline_resource_pack_test.dart'
       - 'lib/settings/definitions/reading_defs.dart'
       - 'lib/utils/fluxdo_render_callbacks.dart'
       - 'lib/widgets/common/emoji_text.dart'
@@ -12,14 +22,37 @@ on:
       - 'lib/widgets/content/collapsed_html_content.dart'
       - 'lib/widgets/markdown_editor/emoji_picker.dart'
       - 'test/emoji_render_style_test.dart'
+      - 'lib/widgets/common/smart_avatar.dart'
+      - 'lib/widgets/content/discourse_html_content/image_utils.dart'
+      - 'test/services/emoji_handler_late_preload_test.dart'
+      - 'test/widgets/content/image_utils_test.dart'
       - '.github/workflows/emoji-style-regression.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/emoji-style-regression.yml
+      patterns: >-
+        ["lib/providers/preferences_provider.dart","lib/services/display_refresh_service.dart","lib/settings/definitions/appearance_defs.dart","lib/settings/definitions/appearance_layout.dart","lib/pages/reading_settings_page.dart","test/services/display_refresh_service_test.dart","lib/services/emoji_handler.dart","lib/services/fonts/emoji_font_service.dart","test/services/emoji_font_coverage_test.dart","lib/services/fonts/offline_resource_pack.dart","lib/services/fonts/font_download_service.dart","test/services/fonts/offline_resource_pack_test.dart","lib/settings/definitions/reading_defs.dart","lib/utils/fluxdo_render_callbacks.dart","lib/widgets/common/emoji_text.dart","lib/widgets/common/styled_emoji_image.dart","lib/widgets/content/collapsed_html_content.dart","lib/widgets/markdown_editor/emoji_picker.dart","test/emoji_render_style_test.dart","lib/widgets/common/smart_avatar.dart","lib/widgets/content/discourse_html_content/image_utils.dart","test/services/emoji_handler_late_preload_test.dart","test/widgets/content/image_utils_test.dart",".github/workflows/emoji-style-regression.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   emoji-style:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -28,8 +61,13 @@ jobs:
           submodules: recursive
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.5'
+          flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgtk-3-dev libx11-dev libxi-dev
+          pkg-config --cflags gtk+-3.0 x11 xi
       - name: Prepare assets
         run: mkdir -p assets/certs
       - name: Resolve Flutter dependencies
@@ -38,25 +76,50 @@ jobs:
         run: dart run tool/gen_l10n.dart
       - name: Analyze emoji style changes
         run: |
-          flutter analyze \
+          flutter analyze --no-fatal-infos \
             lib/providers/preferences_provider.dart \
+            lib/services/display_refresh_service.dart \
+            lib/settings/definitions/appearance_defs.dart \
+            test/services/display_refresh_service_test.dart \
             lib/services/emoji_handler.dart \
+            lib/services/fonts/emoji_font_service.dart \
+            test/services/emoji_font_coverage_test.dart \
+            lib/services/fonts/offline_resource_pack.dart \
+            lib/services/fonts/font_download_service.dart \
+            test/services/fonts/offline_resource_pack_test.dart \
             lib/settings/definitions/reading_defs.dart \
             lib/utils/fluxdo_render_callbacks.dart \
             lib/widgets/common/emoji_text.dart \
             lib/widgets/common/styled_emoji_image.dart \
+            lib/widgets/common/smart_avatar.dart \
+            lib/widgets/content/discourse_html_content/image_utils.dart \
             lib/widgets/content/collapsed_html_content.dart \
             lib/widgets/markdown_editor/emoji_picker.dart \
-            test/emoji_render_style_test.dart
+            test/emoji_render_style_test.dart \
+            test/services/emoji_handler_late_preload_test.dart \
+            test/widgets/content/image_utils_test.dart
       - name: Smoke-check official Google Noto CDN artwork
         shell: bash
         run: |
           set -euo pipefail
           for url in \
             'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.webp' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/noto/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/fluentui/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/twemoji/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/openmoji/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/unicode/grinning.png' \
             'https://fonts.gstatic.com/s/e/noto3demoji/latest/1fa99/512.png'; do
             curl --fail --location --silent --show-error --max-time 25 \
               --retry 2 --retry-delay 1 --output /dev/null "$url"
           done
       - name: Test emoji style and artwork routing
-        run: dart tool/flutterw.dart test test/emoji_render_style_test.dart
+        run: >-
+          dart tool/flutterw.dart test
+          test/emoji_render_style_test.dart
+          test/services/emoji_font_coverage_test.dart
+          test/services/fonts/offline_resource_pack_test.dart
+          test/services/fonts/font_download_service_test.dart
+          test/services/display_refresh_service_test.dart
+          test/services/emoji_handler_late_preload_test.dart
+          test/widgets/content/image_utils_test.dart

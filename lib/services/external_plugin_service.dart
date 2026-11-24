@@ -15,7 +15,6 @@ class ExternalPlugin {
   final String id;
   final String packageName;
   final String label;
-  /// 只有编辑器型插件显示在表情/贴纸面板。
   final String category;
 
   bool get appearsInEditor => category == 'editor';
@@ -25,7 +24,6 @@ class ExternalPlugin {
     final id = value['id'];
     final packageName = value['packageName'];
     final label = value['label'];
-    final category = value['category'];
     if (id is! String || id.isEmpty ||
         packageName is! String || packageName.isEmpty ||
         label is! String || label.trim().isEmpty ||
@@ -36,8 +34,30 @@ class ExternalPlugin {
       id: id,
       packageName: packageName,
       label: label,
-      category: category == 'editor' ? 'editor' : 'app',
+      category: value['category'] == 'editor' ? 'editor' : 'app',
     );
+  }
+}
+
+/// A companion-generated image to be uploaded by Fluxdo's active composer.
+@immutable
+class GeneratedPluginImage {
+  const GeneratedPluginImage({required this.bytes, required this.fileName});
+  final Uint8List bytes;
+  final String fileName;
+
+  static GeneratedPluginImage? fromPlatformValue(Object? value) {
+    if (value is! Map) return null;
+    final bytes = value['bytes'];
+    final fileName = value['fileName'];
+    if (bytes is! Uint8List ||
+        bytes.isEmpty ||
+        bytes.length > 12 * 1024 * 1024 ||
+        fileName is! String ||
+        !RegExp(r'^stevessr_generated\.(png|jpg|webp|avif)$').hasMatch(fileName)) {
+      return null;
+    }
+    return GeneratedPluginImage(bytes: bytes, fileName: fileName);
   }
 }
 
@@ -45,7 +65,9 @@ class ExternalPlugin {
 class ExternalPluginService {
   ExternalPluginService({MethodChannel? channel})
       : _channel = channel ??
-            const MethodChannel('com.github.lingyan000.fluxdo/external_plugins');
+            const MethodChannel('com.github.lingyan000.fluxdo/external_plugins') {
+    _channel.setMethodCallHandler(_onPlatformMethod);
+  }
 
   static final instance = ExternalPluginService();
 
@@ -53,6 +75,18 @@ class ExternalPluginService {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   final MethodChannel _channel;
+
+  /// A result belongs only to the editor that initiated this launch.
+  ValueChanged<GeneratedPluginImage>? _imageReceiver;
+
+  Future<void> _onPlatformMethod(MethodCall call) async {
+    if (call.method != 'generatedImage' && call.method != 'generatedImageCancelled') return;
+    final receiver = _imageReceiver;
+    _imageReceiver = null;
+    if (call.method != 'generatedImage') return;
+    final image = GeneratedPluginImage.fromPlatformValue(call.arguments);
+    if (image != null) receiver?.call(image);
+  }
 
   Future<List<ExternalPlugin>> installedPlugins() async {
     if (!isSupported) return const [];
@@ -73,17 +107,25 @@ class ExternalPluginService {
     }
   }
 
-  Future<bool> launchPlugin(ExternalPlugin plugin) async {
+  Future<bool> launchPlugin(ExternalPlugin plugin, {
+    ValueChanged<GeneratedPluginImage>? onGeneratedImage,
+    String? themeSnapshot,
+  }) async {
     if (!isSupported) return false;
+    _imageReceiver = onGeneratedImage;
     try {
-      return await _channel.invokeMethod<bool>(
+      final launched = await _channel.invokeMethod<bool>(
             'launchPlugin',
-            {'id': plugin.id},
+            {'id': plugin.id, if (themeSnapshot != null) 'theme': themeSnapshot},
           ) ??
           false;
+      if (!launched) _imageReceiver = null;
+      return launched;
     } on MissingPluginException {
+      _imageReceiver = null;
       return false;
     } on PlatformException catch (error) {
+      _imageReceiver = null;
       debugPrint('插件启动失败: ${error.message}');
       return false;
     }

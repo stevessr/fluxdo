@@ -151,6 +151,30 @@ class ChatThread {
     );
   }
 
+  /// 最新活动取真实回复时间；无回复时使用原消息时间，不使用已读或编辑时间。
+  DateTime? get lastActivityAt {
+    final reply = preview?.lastReplyCreatedAt;
+    final original = originalMessage?.createdAt;
+    if (reply == null) return original;
+    if (original == null || reply.isAfter(original)) return reply;
+    return original;
+  }
+
+  /// 时间相同或缺失时使用消息 ID 和 thread ID 保持稳定顺序。
+  static int compareRecentActivity(ChatThread a, ChatThread b) {
+    final at = a.lastActivityAt;
+    final bt = b.lastActivityAt;
+    if (at == null && bt != null) return 1;
+    if (at != null && bt == null) return -1;
+    if (at != null && bt != null) {
+      final byTime = bt.compareTo(at);
+      if (byTime != 0) return byTime;
+    }
+    final byMessage = (b.preview?.lastReplyId ?? b.lastMessageId ?? b.originalMessage?.id ?? 0)
+        .compareTo(a.preview?.lastReplyId ?? a.lastMessageId ?? a.originalMessage?.id ?? 0);
+    return byMessage != 0 ? byMessage : b.id.compareTo(a.id);
+  }
+
   /// 列表标题：优先自定义 title，否则用原消息摘要/正文
   String get displayTitle {
     if (title != null && title!.trim().isNotEmpty) return title!.trim();

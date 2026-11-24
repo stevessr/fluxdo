@@ -4,7 +4,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:app_icons/app_icons.dart';
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
@@ -539,7 +539,8 @@ class _ToastViewState extends State<_ToastView> with TickerProviderStateMixin {
   void _onPulse() {
     if (!mounted) return;
     final expressive =
-        !MediaQuery.disableAnimationsOf(context) &&
+        !(MediaQuery.disableAnimationsOf(context) ||
+            MediaQuery.reduceMotionOf(context)) &&
         M3eFlags.of(context).enabled;
     if (expressive) _pulse.forward(from: 0);
   }
@@ -609,7 +610,9 @@ class _ToastViewState extends State<_ToastView> with TickerProviderStateMixin {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     // 减弱动效：只保留淡入淡出；M3E 关闭：保留位移，去掉形变与回弹
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final reduceMotion =
+        (MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.reduceMotionOf(context));
     final expressive = !reduceMotion && M3eFlags.of(context).enabled;
     final data = widget.session.data.value;
     final t = _enter.value;
@@ -831,8 +834,8 @@ class _ToastViewState extends State<_ToastView> with TickerProviderStateMixin {
                               color: toFg.withValues(alpha: 0.22),
                             ),
                           ),
-                          borderRadius: const BorderRadius.horizontal(
-                            right: Radius.circular(20),
+                          borderRadius: BorderRadius.horizontal(
+                            right: context.shapes.radius(20),
                           ),
                         ),
                         alignment: Alignment.center,
@@ -1019,7 +1022,9 @@ class _StackSlot extends StatelessWidget {
       valueListenable: ToastService._progressOnTop,
       builder: (context, shown, child) => TweenAnimationBuilder<double>(
         tween: Tween<double>(begin: 0, end: shown ? _slotHeight : 0),
-        duration: MediaQuery.disableAnimationsOf(context)
+        duration:
+            (MediaQuery.disableAnimationsOf(context) ||
+                MediaQuery.reduceMotionOf(context))
             ? Duration.zero
             : const Duration(milliseconds: 280),
         curve: Curves.easeOutCubic,

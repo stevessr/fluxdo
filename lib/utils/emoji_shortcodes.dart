@@ -3,6 +3,73 @@ import 'package:flutter/widgets.dart';
 
 final RegExp emojiShortcodeRegex = RegExp(r':([^\s:]+(?:\:t\d)?):');
 
+/// 前后不贴 ASCII 单词字符的短代码(官方 `\B:…:\B`)。
+final RegExp _boundedShortcodeRegex = RegExp(
+  r'(?<![A-Za-z0-9_]):([^\s:]+(?:\:t\d)?):(?![A-Za-z0-9_])',
+);
+
+/// 可以紧挨在短代码前的字符:空白、Unicode 标点与符号(含 emoji)。
+/// 取帖子 cook 的判定(markdown-it isPunctChar),全角标点后也转。
+final RegExp _replaceablePrefixChar = RegExp(
+  // lint 按非 unicode 模式校验,不认 \p{…}
+  // ignore: valid_regexps
+  r'^(?:\s|\p{P}|\p{S}|\p{Extended_Pictographic}|\uFE0F|\u200D)$',
+  unicode: true,
+);
+
+/// 展示文本里应转成表情的短代码,与帖子 cook 的判定一致:
+///
+/// - [inline] 为 true(站点开启 `enable_inline_emoji_translation`)时,
+///   任意位置的 `:name:` 都转;
+/// - 否则短代码须在行首、空白、标点或 emoji 之后,且结尾不紧跟字母
+///   数字 —— `谢谢:smile:`、`12:30:45` 保持原文。
+///
+/// `group(1)` 为表情名。
+Iterable<RegExpMatch> displayEmojiShortcodeMatches(
+  String text, {
+  required bool inline,
+}) sync* {
+  if (!text.contains(':')) return;
+  if (inline) {
+    yield* emojiShortcodeRegex.allMatches(text);
+    return;
+  }
+  for (final match in _boundedShortcodeRegex.allMatches(text)) {
+    if (_isReplaceablePrefix(text, match.start)) yield match;
+  }
+}
+
+bool _isReplaceablePrefix(String text, int index) {
+  if (index == 0) return true;
+  var start = index - 1;
+  // 前一个字符是代理对低位时取完整码点
+  if (start > 0 &&
+      (text.codeUnitAt(start) & 0xFC00) == 0xDC00 &&
+      (text.codeUnitAt(start - 1) & 0xFC00) == 0xD800) {
+    start -= 1;
+  }
+  return _replaceablePrefixChar.hasMatch(text.substring(start, index));
+}
+
+final RegExp _emojiImgTag = RegExp(
+  r'''<img\b[^>]*\bclass=["'][^"']*\bemoji\b[^>]*>''',
+  caseSensitive: false,
+);
+final RegExp _emojiImgLabel = RegExp(
+  r'''\b(?:alt|title)=["'](:[^\s:"']+(?::t\d)?:)["']''',
+);
+
+/// HTML 里的 emoji 图片(`<img class="emoji" alt=":smile:">`)还原成短代码。
+///
+/// 摘要等按正则去标签的场景先调用,否则表情随标签一起被删。
+String emojiImagesToShortcodes(String html) {
+  if (!html.contains('<img')) return html;
+  return html.replaceAllMapped(
+    _emojiImgTag,
+    (m) => _emojiImgLabel.firstMatch(m.group(0)!)?.group(1) ?? '',
+  );
+}
+
 String normalizeEmojiShortcodeName(String raw) {
   var value = raw.trim();
   if (value.startsWith(':') && value.endsWith(':') && value.length > 2) {

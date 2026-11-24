@@ -1,5 +1,5 @@
 import 'package:common_ui/common_ui.dart' show InteractionPageRoute, UiShapesContext;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
@@ -8,7 +8,6 @@ import '../../l10n/s.dart';
 import '../../pages/network_settings_page/network_settings_page.dart';
 import '../../services/cf_challenge_service.dart';
 import '../../services/network/cookie/boundary_sync_service.dart';
-import '../../services/network/cookie/cookie_jar_service.dart';
 import '../../services/network/exceptions/api_exception.dart';
 import '../../services/toast_service.dart';
 import '../../utils/dialog_utils.dart';
@@ -23,6 +22,7 @@ class ErrorView extends StatefulWidget {
     required this.error,
     this.stackTrace,
     this.onRetry,
+    this.onManualCfVerify,
     this.icon,
     this.iconSize = 48,
     this.title,
@@ -38,6 +38,7 @@ class ErrorView extends StatefulWidget {
 
   /// 重试回调
   final VoidCallback? onRetry;
+  final VoidCallback? onManualCfVerify;
 
   /// 自定义图标
   final IconData? icon;
@@ -124,7 +125,7 @@ class _ErrorViewState extends State<ErrorView> {
           isLoading: _actionInProgress,
           onPressed: _actionInProgress
               ? null
-              : () => _runManualCfVerify(context),
+              : widget.onManualCfVerify ?? () => _runManualCfVerify(context),
         ),
       );
     } else if (widget.onRetry != null) {
@@ -195,26 +196,24 @@ class _ErrorViewState extends State<ErrorView> {
     HapticFeedback.selectionClick();
 
     try {
-      final result = await CfChallengeService().showManualVerifyNow(
-        context,
-        true,
+      final service = CfChallengeService();
+      final result = await service.verifyPage(
+        context: context,
+        userInitiated: true,
       );
       if (!mounted) return;
-
-      if (result == true) {
-        // showManualVerify 的少数快速完成路径会先返回 true，再异步把
-        // WebView 的 cf_clearance 落到 CookieJar。错误页若立刻 onRetry，
-        // 原请求就可能继续携带旧/空 Cookie 再次撞盾，看起来像“验证通过但
-        // 重试没反应”。这里在离开错误态前显式等待边界同步收敛。
-        await _syncCfClearanceAfterVerify();
-        if (!mounted) return;
-        ToastService.showSuccess(S.current.cfVerify_success);
-        widget.onRetry?.call();
+      if (result?.reachedOrigin == true) {
+        if (result!.challengeObserved) {
+          ToastService.showSuccess(S.current.cfVerify_success);
+        } else {
+          ToastService.showInfo(S.current.cf_noChallengeTitle);
+        }
+        await service.waitForCompletionCookieSync();
+        if (mounted) widget.onRetry?.call();
         return;
       }
-
-      if (result == false) {
-        ToastService.showError(S.current.cf_verifyIncomplete);
+      if (result != null) {
+        ToastService.showError(result.label(S.current));
         return;
       }
 
@@ -256,29 +255,6 @@ class _ErrorViewState extends State<ErrorView> {
     } finally {
       _setActionInProgress(false);
     }
-  }
-
-  Future<bool> _syncCfClearanceAfterVerify() async {
-    final cookieJar = CookieJarService();
-
-    // 验证流程开始时会删除已失效的 cf_clearance，所以成功后的非空值可以
-    // 作为“新 clearance 已真正进入网络层”的信号。WebView/原生 Cookie
-    // 提交存在轻微时序差，最多给 4 次短重试，总额约 1.5 秒。
-    for (var attempt = 0; attempt < 4; attempt++) {
-      if (attempt > 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-      }
-      await BoundarySyncService.instance.syncFromWebView(
-        cookieNames: const {'cf_clearance'},
-        trusted: true,
-      );
-      final clearance = await cookieJar.getCfClearance();
-      if (clearance != null && clearance.isNotEmpty) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   Future<void> _syncCfClearanceBestEffort() async {

@@ -8,17 +8,36 @@ on:
       - 'packages/app_icons/lib/src/app_icons.dart'
       - 'test/pages/leaderboard_period_range_test.dart'
       - '.github/workflows/leaderboard-check.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: leaderboard-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/leaderboard-check.yml
+      patterns: >-
+        ["lib/pages/leaderboard_page.dart","lib/utils/leaderboard_period_range.dart","packages/app_icons/lib/src/app_icons.dart","test/pages/leaderboard_period_range_test.dart",".github/workflows/leaderboard-check.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -30,8 +49,12 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.5'
+          flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
 
       - name: Prepare generated asset directories
         run: mkdir -p assets/certs
@@ -44,7 +67,11 @@ jobs:
 
       - name: Check formatting
         run: |
-          dart format --output=none --set-exit-if-changed \
+          dart format \
+            lib/pages/leaderboard_page.dart \
+            lib/utils/leaderboard_period_range.dart \
+            test/pages/leaderboard_period_range_test.dart
+          git diff --exit-code -- \
             lib/pages/leaderboard_page.dart \
             lib/utils/leaderboard_period_range.dart \
             test/pages/leaderboard_period_range_test.dart

@@ -8,6 +8,7 @@ extension _UserActions on _TopicDetailPageState {
     final params = _params;
     final detailAsync = ref.read(topicDetailProvider(params));
     if (detailAsync.isLoading) return;
+    _cancelReadingJump();
 
     final detail = ref.read(topicDetailProvider(params)).value;
     final notifier = ref.read(topicDetailProvider(params).notifier);
@@ -17,11 +18,12 @@ extension _UserActions on _TopicDetailPageState {
     );
 
     setState(() => _isRefreshing = true);
-    await notifier.refreshWithPostNumber(anchorPostNumber);
+    final applied = await notifier.refreshWithPostNumber(anchorPostNumber);
 
     if (!mounted) return;
     setState(() => _isRefreshing = false);
 
+    if (!applied || _controller.progressLoad.value != null) return;
     final updatedDetail = ref.read(topicDetailProvider(params)).value;
     if (updatedDetail == null) return;
 
@@ -39,7 +41,52 @@ extension _UserActions on _TopicDetailPageState {
     }
   }
 
-  Future<void> _handleReply(Post? replyToPost, {String? initialContent}) async {
+  /// 回复入口汇合点(带 [initialContent] 时作为引用插入):手机 / 中屏走
+  /// 底栏快捷回复,宽屏阅读栏形态走停靠编辑器;[forceFullEditor] 时打开
+  /// 完整编辑器弹层。
+  Future<void> _handleReply(
+    Post? replyToPost, {
+    String? initialContent,
+    bool forceFullEditor = false,
+    bool initialContentIsComplete = false,
+    Rect? morphFrom,
+    double morphFromRadius = 0,
+    Color? morphFromColor,
+    VoidCallback? onHandoffComplete,
+    ui.Image? morphFromSnapshot,
+    VoidCallback? onHandoffStart,
+
+    /// 快捷回复交出的草稿保存落定后完成：编辑器的草稿核对先等它
+    Future<void>? draftReleased,
+  }) async {
+    if (!forceFullEditor && _quickReplyEnabled) {
+      // 快捷回复已打开时一律在其中继续(引用插入其中,需要时手动展开)
+      if (_replySession.active ||
+          !await _prefersFullEditor(
+            target: replyToPost,
+            quote: initialContent,
+          )) {
+        if (initialContent != null) {
+          await _replySession.insertQuote(initialContent, target: replyToPost);
+        } else {
+          await _replySession.open(target: replyToPost);
+        }
+        return;
+      }
+      if (!mounted) return;
+      // 直接打开完整编辑器:从底栏回复胶囊长出;草稿在后台交接,不等保存
+      draftReleased ??= _replySession.releaseForFullEditor();
+      final source = _replyEntryMorphSource();
+      morphFrom ??= source?.rect;
+      if (source != null) {
+        morphFromRadius = source.radius;
+        morphFromColor ??= source.color;
+      }
+    }
+    if (!forceFullEditor && _dockedComposerEnabled) {
+      await _dockedComposer.open(target: replyToPost, quote: initialContent);
+      return;
+    }
     final params = _params;
     final notifier = ref.read(topicDetailProvider(params).notifier);
     final detail = ref.read(topicDetailProvider(params)).value;
@@ -58,7 +105,7 @@ extension _UserActions on _TopicDetailPageState {
       widget.topicId,
       replyToPostNumber: replyToPost?.postNumber,
     );
-    final preloadedDraftFuture = DiscourseService().getDraft(draftKey);
+    final preloadedDraftFuture = _preloadDraftAfter(draftReleased, draftKey);
 
     final newPost = await showReplySheet(
       context: context,
@@ -66,6 +113,14 @@ extension _UserActions on _TopicDetailPageState {
       categoryId: detail?.categoryId,
       replyToPost: replyToPost,
       initialContent: initialContent,
+      initialContentIsComplete: initialContentIsComplete,
+      morphFrom: morphFrom,
+      morphFromRadius: morphFromRadius,
+      morphFromColor: morphFromColor,
+      returnAnchor: _replyEntryMorphSource,
+      onHandoffComplete: onHandoffComplete,
+      morphFromSnapshot: morphFromSnapshot,
+      onHandoffStart: onHandoffStart,
       topicTitle: detail?.title,
       // 公开话题的「转为私信」预选被回复楼层作者；私信话题则沿用原
       // 收件人/群组但排除当前用户，避免把自己加入新私信收件人列表。
@@ -80,7 +135,7 @@ extension _UserActions on _TopicDetailPageState {
                           ref.read(currentUserProvider).value?.username,
                     )
                     .map((user) => user.username),
-                ...detail.allowedGroups,
+                ...detail.allowedGroups.map((group) => group.name),
               ] else if (replyToPost != null &&
                   replyToPost.username !=
                       ref.read(currentUserProvider).value?.username)
@@ -261,7 +316,11 @@ extension _UserActions on _TopicDetailPageState {
     }
     if (!mounted) return;
     // 原文带回回复编辑器,重新提交后会再次进入审核队列
-    await _handleReply(replyToPost, initialContent: pending.raw);
+    await _handleReply(
+      replyToPost,
+      initialContent: pending.raw,
+      forceFullEditor: true,
+    );
   }
 
   Future<void> _handleEdit(Post post) async {
@@ -772,6 +831,31 @@ extension _UserActions on _TopicDetailPageState {
     return post;
   }
 
+  /// 预取草稿(利用弹层动画时间并行加载);[released] 非空时先等快捷回复
+  /// 交出的草稿保存落定,取到的才是最新序号
+  Future<Draft?> _preloadDraftAfter(Future<void>? released, String draftKey) {
+    if (released == null) return DiscourseService().getDraft(draftKey);
+    return released.then((_) => DiscourseService().getDraft(draftKey));
+  }
+
+  /// 回复发出后:并入帖子流并滚到新帖,不在当前窗口时给可跳转的提示
+  void _afterReplyPosted(Post newPost, bool wasAtBottom) {
+    _updateNestedViewAfterReply(newPost);
+    final addedToView = ref
+        .read(topicDetailProvider(_params).notifier)
+        .addPost(newPost, wasAtBottom: wasAtBottom);
+    if (addedToView) {
+      _scrollAfterKeyboardDismiss(newPost.postNumber);
+    } else {
+      ToastService.show(
+        S.current.post_replySent,
+        type: ToastType.success,
+        actionLabel: S.current.post_replySentAction,
+        onAction: () => _scrollToPost(newPost.postNumber),
+      );
+    }
+  }
+
   Future<void> _handleQuotePost(Post post) async {
     final params = _params;
     final notifier = ref.read(topicDetailProvider(params).notifier);
@@ -797,11 +881,29 @@ extension _UserActions on _TopicDetailPageState {
       topicId: widget.topicId,
     );
 
+    ({Rect rect, double radius, Color color})? morph;
+    Future<void>? draftReleased;
+    if (_quickReplyEnabled) {
+      if (_replySession.active ||
+          !await _prefersFullEditor(target: post, quote: quote)) {
+        await _replySession.insertQuote(quote, target: post);
+        return;
+      }
+      if (!mounted) return;
+      // 直接打开完整编辑器:从底栏回复胶囊长出;草稿在后台交接,不等保存
+      draftReleased = _replySession.releaseForFullEditor();
+      morph = _replyEntryMorphSource();
+    }
+    if (_dockedComposerEnabled) {
+      await _dockedComposer.open(target: post, quote: quote);
+      return;
+    }
+
     final draftKey = Draft.replyKey(
       widget.topicId,
       replyToPostNumber: post.postNumber,
     );
-    final preloadedDraftFuture = DiscourseService().getDraft(draftKey);
+    final preloadedDraftFuture = _preloadDraftAfter(draftReleased, draftKey);
 
     final newPost = await showReplySheet(
       context: context,
@@ -809,6 +911,10 @@ extension _UserActions on _TopicDetailPageState {
       categoryId: detail?.categoryId,
       replyToPost: post,
       initialContent: quote,
+      morphFrom: morph?.rect,
+      morphFromRadius: morph?.radius ?? 0,
+      morphFromColor: morph?.color,
+      returnAnchor: _replyEntryMorphSource,
       topicTitle: detail?.title,
       preloadedDraftFuture: preloadedDraftFuture,
       isPrivateMessageTopic: detail?.isPrivateMessage ?? false,
@@ -999,72 +1105,49 @@ extension _UserActions on _TopicDetailPageState {
     );
   }
 
-  Future<void> _handleRemovePrivateMessageParticipant(
-    TopicUser participant,
+  Future<void> _showPrivateMessageMembers() async {
+    final params = _params;
+    final left = await showAppBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        _membersRoute = ModalRoute.of<bool>(sheetContext);
+        return PrivateMessageMembersSheet(params: params);
+      },
+    );
+    _membersRoute = null;
+    if (left == true && mounted && widget.topicId == params.topicId) {
+      _closeRemovedPrivateMessage();
+    }
+  }
+
+  /// 归档 / 取消归档当前私信。
+  ///
+  /// 归档后这条私信已离开收件箱，留在页上会和列表状态打架，所以直接退回
+  /// 列表（同官方 toggleArchiveMessage 的 backToInbox）；取消归档是「捞回来
+  /// 继续看」，留在原页只给个提示。
+  Future<void> _handleToggleArchiveMessage(
+    TopicDetailNotifier notifier,
   ) async {
-    if (_removingPrivateMessageParticipantId != null) return;
+    if (_isTogglingArchiveMessage) return;
 
     final detail = ref.read(topicDetailProvider(_params)).value;
-    final currentUser = ref.read(currentUserProvider).value;
-    if (detail == null || !detail.isPrivateMessage || currentUser == null) {
-      return;
-    }
+    if (detail == null || !detail.isPrivateMessage) return;
 
-    final isSelf = participant.id == currentUser.id;
-    final canRemove = isSelf
-        ? detail.canRemoveSelfId == participant.id
-        : detail.canRemoveAllowedUsers;
-    if (!canRemove) return;
-
-    final confirmed = await showAppDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          isSelf ? context.l10n.common_exit : context.l10n.common_remove,
-        ),
-        content: Text(
-          isSelf
-              ? context.l10n.topicDetail_leavePrivateMessageConfirm
-              : context.l10n.topicDetail_removePrivateMessageParticipantConfirm(
-                  participant.username,
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(context.l10n.common_cancel),
-          ),
-          FilledButton(
-            key: const ValueKey('pm-participant-confirm'),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(
-              isSelf ? context.l10n.common_exit : context.l10n.common_remove,
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _removingPrivateMessageParticipantId = participant.id);
+    setState(() => _isTogglingArchiveMessage = true);
     try {
-      await ref
-          .read(topicDetailProvider(_params).notifier)
-          .removePrivateMessageParticipant(participant);
+      final archived = await notifier.toggleArchivePrivateMessage();
       if (!mounted) return;
 
-      if (isSelf) {
-        _closeRemovedPrivateMessage();
+      _invalidatePrivateMessageLists();
+      if (archived) {
+        ToastService.showSuccess(context.l10n.topicDetail_messageArchived);
+        _leaveTopicPage();
       } else {
-        ToastService.showSuccess(
-          context.l10n.topicDetail_removedPrivateMessageParticipant(
-            participant.username,
-          ),
-        );
+        ToastService.showSuccess(context.l10n.topicDetail_messageMovedToInbox);
       }
     } catch (error) {
       if (mounted) {
@@ -1072,7 +1155,7 @@ extension _UserActions on _TopicDetailPageState {
       }
     } finally {
       if (mounted) {
-        setState(() => _removingPrivateMessageParticipantId = null);
+        setState(() => _isTogglingArchiveMessage = false);
       }
     }
   }
@@ -1245,11 +1328,29 @@ extension _UserActions on _TopicDetailPageState {
     );
 
     // 预加载草稿
+    ({Rect rect, double radius, Color color})? morph;
+    Future<void>? draftReleased;
+    if (_quickReplyEnabled) {
+      if (_replySession.active ||
+          !await _prefersFullEditor(target: post, quote: quote)) {
+        await _replySession.insertQuote(quote, target: post);
+        return;
+      }
+      if (!mounted) return;
+      // 直接打开完整编辑器:从底栏回复胶囊长出;草稿在后台交接,不等保存
+      draftReleased = _replySession.releaseForFullEditor();
+      morph = _replyEntryMorphSource();
+    }
+    if (_dockedComposerEnabled) {
+      await _dockedComposer.open(target: post, quote: quote);
+      return;
+    }
+
     final draftKey = Draft.replyKey(
       widget.topicId,
       replyToPostNumber: post.postNumber,
     );
-    final preloadedDraftFuture = DiscourseService().getDraft(draftKey);
+    final preloadedDraftFuture = _preloadDraftAfter(draftReleased, draftKey);
 
     // 打开回复框，预填引用内容（回复给被引用的帖子）
     final newPost = await showReplySheet(
@@ -1258,6 +1359,10 @@ extension _UserActions on _TopicDetailPageState {
       categoryId: detail?.categoryId,
       replyToPost: post,
       initialContent: quote,
+      morphFrom: morph?.rect,
+      morphFromRadius: morph?.radius ?? 0,
+      morphFromColor: morph?.color,
+      returnAnchor: _replyEntryMorphSource,
       topicTitle: detail?.title,
       preloadedDraftFuture: preloadedDraftFuture,
       isPrivateMessageTopic: detail?.isPrivateMessage ?? false,
@@ -1298,11 +1403,29 @@ extension _UserActions on _TopicDetailPageState {
     final wasAtBottom = !notifier.hasMoreAfter;
 
     // 预加载草稿
+    ({Rect rect, double radius, Color color})? morph;
+    Future<void>? draftReleased;
+    if (_quickReplyEnabled) {
+      if (_replySession.active ||
+          !await _prefersFullEditor(target: post, quote: quote)) {
+        await _replySession.insertQuote(quote, target: post);
+        return;
+      }
+      if (!mounted) return;
+      // 直接打开完整编辑器:从底栏回复胶囊长出;草稿在后台交接,不等保存
+      draftReleased = _replySession.releaseForFullEditor();
+      morph = _replyEntryMorphSource();
+    }
+    if (_dockedComposerEnabled) {
+      await _dockedComposer.open(target: post, quote: quote);
+      return;
+    }
+
     final draftKey = Draft.replyKey(
       widget.topicId,
       replyToPostNumber: post.postNumber,
     );
-    final preloadedDraftFuture = DiscourseService().getDraft(draftKey);
+    final preloadedDraftFuture = _preloadDraftAfter(draftReleased, draftKey);
 
     // 打开回复框，预填引用内容
     final newPost = await showReplySheet(
@@ -1311,6 +1434,10 @@ extension _UserActions on _TopicDetailPageState {
       categoryId: detail?.categoryId,
       replyToPost: post,
       initialContent: quote,
+      morphFrom: morph?.rect,
+      morphFromRadius: morph?.radius ?? 0,
+      morphFromColor: morph?.color,
+      returnAnchor: _replyEntryMorphSource,
       topicTitle: detail?.title,
       preloadedDraftFuture: preloadedDraftFuture,
       isPrivateMessageTopic: detail?.isPrivateMessage ?? false,
@@ -1564,8 +1691,8 @@ extension _UserActions on _TopicDetailPageState {
     TopicDetailNotifier notifier,
     int anchor,
   ) async {
-    await notifier.refreshWithPostNumber(anchor);
-    if (!mounted) return;
+    final applied = await notifier.refreshWithPostNumber(anchor);
+    if (!mounted || !applied || _controller.progressLoad.value != null) return;
     final updated = ref.read(topicDetailProvider(_params)).value;
     if (updated == null) return;
     // 刷新在途(网络往返)期间用户可能已继续滚动:落地时重取当前位置,
@@ -1586,6 +1713,7 @@ extension _UserActions on _TopicDetailPageState {
 
   /// 切换嵌套视图
   void _toggleNestedView() {
+    _cancelReadingJump();
     if (_isNestedView) {
       setState(() {
         _isNestedView = false;

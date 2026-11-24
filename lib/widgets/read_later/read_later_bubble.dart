@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -101,14 +102,14 @@ class _ReadLaterBubbleState extends ConsumerState<ReadLaterBubble>
                 child: Container(
                   width: _bubbleSize,
                   height: _bubbleSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
+                  decoration: ShapeDecoration(
                     color: backgroundColor.withValues(alpha: 0.9),
-                    border: Border.all(
-                      color: colorScheme.outline.withValues(alpha: 0.1),
-                      width: 1.0,
+                    shape: context.shapes.circle(
+                      side: BorderSide(
+                        color: colorScheme.outline.withValues(alpha: 0.1),
+                      ),
                     ),
-                    boxShadow: [
+                    shadows: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 6,

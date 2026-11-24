@@ -17,6 +17,18 @@ Map<String, dynamic> _parseDataField(dynamic data) {
   return {};
 }
 
+/// 解析 `grouped_unread_notifications`：通知类型 id → 未读数。
+/// JSON 的键是字符串，无法解析的条目跳过。
+Map<int, int> parseGroupedUnread(Object? raw) {
+  if (raw is! Map) return const {};
+  final result = <int, int>{};
+  raw.forEach((key, value) {
+    final type = int.tryParse('$key');
+    if (type != null && value is num) result[type] = value.toInt();
+  });
+  return result;
+}
+
 /// Discourse 通知类型枚举
 enum NotificationType {
   mentioned(1),
@@ -268,6 +280,9 @@ class DiscourseNotification {
   final int id;
   final int userId;
   final NotificationType notificationType;
+  final int? rawNotificationTypeId;
+
+  int get notificationTypeId => rawNotificationTypeId ?? notificationType.id;
   final bool read;
   final bool highPriority;
   final DateTime createdAt;
@@ -282,6 +297,7 @@ class DiscourseNotification {
     required this.id,
     required this.userId,
     required this.notificationType,
+    this.rawNotificationTypeId,
     required this.read,
     required this.highPriority,
     required this.createdAt,
@@ -300,6 +316,7 @@ class DiscourseNotification {
       notificationType: NotificationType.fromId(
         json['notification_type'] as int,
       ),
+      rawNotificationTypeId: json['notification_type'] as int,
       read: json['read'] as bool? ?? false,
       highPriority: json['high_priority'] as bool? ?? false,
       createdAt:
@@ -357,6 +374,7 @@ class DiscourseNotification {
       id: id ?? this.id,
       userId: userId ?? this.userId,
       notificationType: notificationType ?? this.notificationType,
+      rawNotificationTypeId: notificationType == null ? rawNotificationTypeId : notificationType.id,
       read: read ?? this.read,
       highPriority: highPriority ?? this.highPriority,
       createdAt: createdAt ?? this.createdAt,
@@ -443,9 +461,12 @@ class DiscourseNotification {
     return notificationType.label;
   }
 
+  /// 描述文案里出现的动作者名字，可能为空
+  String get actorName => data.displayUsername ?? data.originalUsername ?? '';
+
   /// 获取通知描述
   String get description {
-    final username = data.displayUsername ?? data.originalUsername ?? '';
+    final username = actorName;
 
     // discourse-solved 使用 custom(14)，必须在通用 custom 分支之前识别。
     if (isAcceptedSolutionNotification) {
@@ -484,7 +505,9 @@ class DiscourseNotification {
       case NotificationType.groupMentioned:
         return '$username @${data.groupName ?? ''}';
       case NotificationType.watchingFirstPost:
-        return S.current.notification_newTopic;
+        return username.isNotEmpty
+            ? S.current.notification_createdNewTopic(username)
+            : S.current.notification_newTopic;
       case NotificationType.followingCreatedTopic:
         return S.current.notification_createdNewTopic(username);
       case NotificationType.followingReplied:

@@ -89,7 +89,10 @@ class DioHttpClient extends http.BaseClient {
     mainHost: Uri.parse(AppConstants.baseUrl).host,
   );
 
-  static final DownloadRequestQueue _smallSemaphore = DownloadRequestQueue(12);
+  static final DownloadRequestQueue _smallSemaphore = DownloadRequestQueue(
+    12,
+    groupLimits: ImageDownloadTaskPools.smallGroupLimits,
+  );
   static final DownloadRequestQueue _contentSemaphore = DownloadRequestQueue(
     6,
     reservedHighSlots: 1,
@@ -120,7 +123,15 @@ class DioHttpClient extends http.BaseClient {
   static void Function() retainForeground(
     DownloadChannel channel,
     String url,
-  ) => _semaphoreOf(channel).retainForeground(url);
+  ) {
+    final releaseInner = _semaphoreOf(channel).retainForeground(url);
+    final releaseOuter = _taskPools.queueFor(Uri.parse(url), channel)
+        .retainForeground(url);
+    return () {
+      releaseOuter();
+      releaseInner();
+    };
+  }
 
   /// 提取 [AppConstants.baseUrl] 的 host(例如 `linux.do`),用于判断主域。
   /// 注意是 host 比对而不是 URL prefix 比对 —— 子域(`auth.linux.do` 等)
@@ -231,9 +242,11 @@ class DioHttpClient extends http.BaseClient {
     Future<void> Function(Uint8List bytes)? onBytesReady,
     dio.CancelToken? cancellation,
     Duration callTimeout = const Duration(minutes: 2),
+    String? smallGroup,
   }) async {
+    final group = channel == DownloadChannel.small ? smallGroup : null;
     final taskQueue = _taskPools.queueFor(url, channel);
-    await taskQueue.acquire(url.toString(), priority);
+    await taskQueue.acquire(url.toString(), priority, group: group);
     try {
       return await DeadlineDio.withDeadline(
         dio.RequestOptions(path: url.toString(), cancelToken: cancellation),
@@ -246,12 +259,13 @@ class DioHttpClient extends http.BaseClient {
           onBytesReady: onBytesReady,
           cancellation: request.cancelToken,
           requestExtra: request.extra,
+          group: group,
         ),
       );
     } on dio.DioException catch (error) {
       throw http.ClientException('Dio error: ${error.message}', url);
     } finally {
-      taskQueue.release();
+      taskQueue.release(group: group);
     }
   }
 
@@ -263,10 +277,10 @@ class DioHttpClient extends http.BaseClient {
     required Future<void> Function(Uint8List bytes)? onBytesReady,
     required dio.CancelToken? cancellation,
     required Map<String, dynamic> requestExtra,
+    required String? group,
   }) async {
     final elapsed = Stopwatch()..start();
     final semaphore = _semaphoreOf(channel);
-    final group = channel == DownloadChannel.small ? channel.name : null;
     final cancelToken = cancellation ?? dio.CancelToken();
     cancelToken.throwIfCancellationRequested();
     await semaphore.acquire(

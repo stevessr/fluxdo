@@ -1,5 +1,5 @@
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../services/external_plugin_service.dart';
 import 'package:app_icons/app_icons.dart';
@@ -27,6 +27,8 @@ class EmojiStickerPanel extends StatefulWidget {
   /// 选中表情包的回调，参数为 Markdown 图片文本
   final ValueChanged<String> onStickerSelected;
 
+  final ValueChanged<GeneratedPluginImage>? onGeneratedImage;
+
   /// 退格回调(移动端表情键盘标配:面板打开时软键盘收起,没有它
   /// 就只能切回键盘删)。null 或桌面端不显示退格键(桌面端焦点常驻
   /// 输入框,物理退格直接可用)。
@@ -52,6 +54,7 @@ class EmojiStickerPanel extends StatefulWidget {
     super.key,
     required this.onEmojiSelected,
     required this.onStickerSelected,
+    this.onGeneratedImage,
     this.onBackspace,
     this.inlineSearch = false,
     this.compact = false,
@@ -85,9 +88,11 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel>
   List<ExternalPlugin> _externalPlugins = const [];
 
   Future<void> _refreshExternalPlugins() async {
-    final plugins = (await ExternalPluginService.instance.installedPlugins())
-        .where((plugin) => plugin.appearsInEditor)
-        .toList();
+    final plugins = widget.onGeneratedImage == null
+        ? const <ExternalPlugin>[]
+        : (await ExternalPluginService.instance.installedPlugins())
+            .where((plugin) => plugin.appearsInEditor)
+            .toList();
     if (!mounted) return;
     final unchanged = plugins.length == _externalPlugins.length &&
         plugins.asMap().entries.every((entry) =>
@@ -105,7 +110,11 @@ class _EmojiStickerPanelState extends State<EmojiStickerPanel>
   }
 
   Future<void> _openExternalPlugin(ExternalPlugin plugin) async {
-    final opened = await ExternalPluginService.instance.launchPlugin(plugin);
+    final opened = await ExternalPluginService.instance.launchPlugin(
+      plugin,
+      onGeneratedImage: widget.onGeneratedImage,
+      themeSnapshot: PluginTheme.encode(Theme.of(context)),
+    );
     if (!mounted) return;
     if (!opened) {
       ScaffoldMessenger.of(context).showSnackBar(

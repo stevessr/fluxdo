@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
-import 'package:jovial_svg/jovial_svg.dart';
 
 import '../../services/discourse_cache_manager.dart';
+import '../../services/discourse/discourse_service.dart';
+import '../../utils/url_helper.dart';
+import '../../services/svg_image_cache.dart';
 import '../../utils/svg_utils.dart';
 
 /// 卡片取色与系统任务图标共享的首帧栅格化，复用公共下载和图片缓存。
@@ -16,11 +18,17 @@ abstract final class MiniAppArtworkImage {
     int size = 32,
     BoxFit fit = BoxFit.fill,
   }) async {
+    var resolved = UrlHelper.resolveMediaUrl(url);
+    if (resolved.startsWith('upload://')) {
+      final mediaUrl = await DiscourseService().resolveShortUrl(resolved);
+      resolved = UrlHelper.resolveMediaUrl(mediaUrl ?? '');
+    }
+    if (resolved.isEmpty) throw const FormatException('Missing mini app artwork');
     final bytes = await BlobImageCache.fetch(
       BlobImageCache.contentBucket,
-      url,
+      resolved,
     ).timeout(const Duration(seconds: 10));
-    if (!SvgUtils.isSvgBytes(bytes)) return _raster(url, size, fit);
+    if (!SvgUtils.isSvgBytes(bytes)) return _raster(resolved, size, fit);
     // 可选的系统图标和背景装饰不能因大型 SVG 阻塞主线程。
     if (bytes.length > 256 * 1024) {
       throw const FormatException('Mini app artwork too large');
@@ -33,7 +41,8 @@ abstract final class MiniAppArtworkImage {
         ),
       ),
     );
-    final svg = ScalableImage.fromSvgString(source, warnF: (_) {});
+    // 取色与水印共用同一份解析产物，较大的图标在后台解析。
+    final svg = await SvgImageCache.load(source);
     final viewport = svg.viewport;
     if (viewport.isEmpty) throw const FormatException('Empty mini app artwork');
     await svg.prepareImages();

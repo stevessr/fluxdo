@@ -1,6 +1,7 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext, UiEmphasis;
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -123,7 +124,7 @@ class _LongImageUploadDialogState extends State<LongImageUploadDialog> {
               height: 220,
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: context.shapes.borderRadius(8),
               ),
               clipBehavior: Clip.antiAlias,
               child: Image.file(
@@ -188,7 +189,7 @@ class _LongImageUploadDialogState extends State<LongImageUploadDialog> {
                 Icon(
                   Icons.content_cut_rounded,
                   size: 18,
-                  color: theme.colorScheme.primary,
+                  color: UiEmphasis.of(theme).accent,
                 ),
                 const SizedBox(width: 8),
                 Expanded(

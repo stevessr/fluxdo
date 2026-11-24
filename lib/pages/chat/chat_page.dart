@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
@@ -10,6 +12,7 @@ import '../../providers/theme_provider.dart';
 import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/chat/chat_conversation_tabs.dart';
+import '../../widgets/chat/chat_thread_preview_card.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
@@ -67,10 +70,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   _ChatChannelFilter _channelFilter = _ChatChannelFilter.all;
-  _ChatChannelSort _channelSort = _ChatChannelSort.priority;
+  _ChatChannelSort _channelSort = _ChatChannelSort.recentActivity;
 
   static const _channelFilterPreferenceKey = 'chat_channel_list_filter';
-  static const _channelSortPreferenceKey = 'chat_channel_list_sort';
+  // 旧版本默认 priority；换 key 让既有安装也采用最近活动作为默认。
+  static const _channelSortPreferenceKey = 'chat_channel_list_sort_v2';
 
   @override
   void initState() {
@@ -79,14 +83,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     final prefs = ref.read(sharedPreferencesProvider);
     final storedFilter = prefs.getString(_channelFilterPreferenceKey);
-    final storedSort = prefs.getString(_channelSortPreferenceKey);
+    final storedSort = prefs.getString(_channelSortPreferenceKey) ??
+        (prefs.getString('chat_channel_list_sort') == _ChatChannelSort.alphabetical.name
+            ? _ChatChannelSort.alphabetical.name
+            : null);
     _channelFilter = _ChatChannelFilter.values.firstWhere(
       (value) => value.name == storedFilter,
       orElse: () => _ChatChannelFilter.all,
     );
     _channelSort = _ChatChannelSort.values.firstWhere(
       (value) => value.name == storedSort,
-      orElse: () => _ChatChannelSort.priority,
+      orElse: () => _ChatChannelSort.recentActivity,
     );
   }
 
@@ -120,7 +127,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _openGlobalSearch() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ChatSearchPage()),
+      InteractionPageRoute(builder: (_) => const ChatSearchPage()),
     );
   }
 
@@ -256,7 +263,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _openBrowseChannels() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ChatBrowseChannelsPage()),
+      InteractionPageRoute(builder: (_) => const ChatBrowseChannelsPage()),
     );
   }
 
@@ -276,7 +283,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             leading: SizedBox(
               width: 28,
               child: selected
-                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  ? Icon(Icons.check_rounded, color: UiEmphasis.of(theme).selected)
                   : null,
             ),
             title: Text(title),
@@ -341,7 +348,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             leading: SizedBox(
               width: 28,
               child: selected
-                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  ? Icon(Icons.check_rounded, color: UiEmphasis.of(theme).selected)
                   : null,
             ),
             title: Text(title),
@@ -563,7 +570,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 filled: true,
                 fillColor: theme.colorScheme.surfaceContainerHigh,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -811,13 +826,17 @@ class _ChatChannelListView extends ConsumerWidget {
         itemCount: channels.length,
         itemBuilder: (context, index) {
           final channel = channels[index];
-          return ChatChannelTile(
+          return SegmentedCardItem(
             key: ValueKey('chat-channel-${channel.id}'),
+            index: index,
+            count: channels.length,
+            gap: 3,
+            child: ChatChannelTile(
             channel: channel,
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                InteractionPageRoute(
                   builder: (_) {
                     final title = channel.chatableType == 'DirectMessage'
                         ? (channel.title?.isNotEmpty == true
@@ -834,6 +853,7 @@ class _ChatChannelListView extends ConsumerWidget {
                 ),
               );
             },
+          ),
           );
         },
       ),
@@ -1042,8 +1062,8 @@ class ChatChannelTile extends ConsumerWidget {
     final isFavorite = ref.read(chatFavoritesProvider).contains(channel.id);
     showAppBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) {
         return SafeArea(
@@ -1168,7 +1188,7 @@ class ChatChannelTile extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: context.shapes.borderRadius(10),
               ),
               child: Text(
                 channel.unreadCount > 99
@@ -1188,7 +1208,7 @@ class ChatChannelTile extends ConsumerWidget {
       tileColor: hasUnread
           ? theme.colorScheme.primaryContainer.withValues(alpha: 0.12)
           : null,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(12)),
       onTap: onTap,
       onLongPress: () => _showChannelMenu(context, ref),
     );
@@ -1222,7 +1242,7 @@ class _ChatPageSkeleton extends StatelessWidget {
                   width: 120 + (index % 3) * 60.0,
                   decoration: BoxDecoration(
                     color: shimmerColor,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: context.shapes.borderRadius(4),
                   ),
                 ),
                 subtitle: Padding(
@@ -1232,7 +1252,7 @@ class _ChatPageSkeleton extends StatelessWidget {
                     width: 180 + (index % 2) * 40.0,
                     decoration: BoxDecoration(
                       color: shimmerColor,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: context.shapes.borderRadius(4),
                     ),
                   ),
                 ),
@@ -1438,7 +1458,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     Navigator.of(context).pop();
     Navigator.push(
       context,
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) =>
             ChatMessagePage(channelId: channel.id, channelTitle: title),
       ),
@@ -1484,7 +1504,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
 
       Navigator.push(
         context,
-        MaterialPageRoute(
+        InteractionPageRoute(
           builder: (_) =>
               ChatMessagePage(channelId: channelId, channelTitle: title),
         ),
@@ -1725,7 +1745,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
     final createLabel = l10n.chat_create_group_chat;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(16)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
         child: Column(
@@ -1750,7 +1770,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                             vertical: 14,
                           ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: context.shapes.borderRadius(8),
                           ),
                         ),
                         onChanged: _onSearch,
@@ -1805,7 +1825,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                     hintText: l10n.chat_group_name_hint,
                     isDense: true,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: context.shapes.borderRadius(10),
                     ),
                   ),
                 ),
@@ -1855,7 +1875,7 @@ class _NewDmDialogState extends ConsumerState<_NewDmDialog> {
                       vertical: 10,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: context.shapes.borderRadius(10),
                     ),
                   ),
                   onChanged: _onSearch,
@@ -1962,102 +1982,14 @@ class _ChatThreadTabView extends ConsumerWidget {
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: threads.length,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+            separatorBuilder: (_, _) => const Divider(height: 1, indent: 16, endIndent: 16),
             itemBuilder: (context, index) {
               final (thread, channel) = threads[index];
               final om = thread.originalMessage;
-              String? avatarUrl;
-              if (om?.user?.avatarTemplate != null) {
-                avatarUrl = UrlHelper.resolveUrlWithCdn(
-                  om!.user!.avatarTemplate!.replaceAll('{size}', '48'),
-                );
-              }
-              final replyCount =
-                  thread.preview?.replyCount ?? thread.replyCount;
-              final lastAt = thread.preview?.lastReplyCreatedAt;
-              final time = lastAt != null
-                  ? TimeUtils.formatRelativeTime(lastAt)
-                  : (om?.createdAt != null
-                        ? TimeUtils.formatRelativeTime(om!.createdAt!)
-                        : null);
-
-              return ListTile(
-                leading: SmartAvatar(
-                  imageUrl: avatarUrl,
-                  radius: 20,
-                  fallbackText: om?.user?.username,
-                ),
-                title: Text(
-                  thread.displayTitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.secondaryContainer
-                              .withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          channel.title ?? '#${channel.id}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSecondaryContainer,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.forum_outlined,
-                        size: 14,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        replyCount > 0 ? '$replyCount 条回复' : '消息串',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                      if (om?.user?.username != null) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            '@${om!.user!.username}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (time != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          time,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
+              return ChatThreadListItem(
+                key: ValueKey(thread.id),
+                thread: thread,
+                channel: channel,
                 onTap: () async {
                   ChatMessage? original;
                   if (om != null) {
@@ -2072,6 +2004,7 @@ class _ChatThreadTabView extends ConsumerWidget {
                     thread: thread,
                     originalMessage: original,
                   );
+                  if (context.mounted) ref.invalidate(chatAllThreadsProvider);
                 },
               );
             },

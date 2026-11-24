@@ -1,6 +1,6 @@
 import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/core_providers.dart';
@@ -262,28 +262,33 @@ class _ForumPreferencesPageState extends ConsumerState<ForumPreferencesPage> {
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-        child: TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            hintText: context.l10n.forumPrefs_search,
-            prefixIcon: const Icon(Symbols.search_rounded, size: 20),
-            filled: true,
-            border: OutlineInputBorder(
-              borderRadius: context.shapes.borderRadius(24),
-              borderSide: BorderSide.none,
+        child: InputFieldShell(
+          radius: 24,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest
+              .withValues(alpha: 0.4),
+          child: TextField(
+            controller: _searchController,
+            textAlignVertical: TextAlignVertical.center,
+            decoration: InputDecoration(
+              hintText: context.l10n.forumPrefs_search,
+              prefixIcon: const Icon(Symbols.search_rounded, size: 20),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 16,
+              ),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: context.l10n.common_clear,
+                      icon: const Icon(Symbols.close_rounded, size: 20),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
             ),
-            suffixIcon: _query.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: context.l10n.common_clear,
-                    icon: const Icon(Symbols.close_rounded, size: 20),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _query = '');
-                    },
-                  ),
+            onChanged: (value) => setState(() => _query = value),
           ),
-          onChanged: (value) => setState(() => _query = value),
         ),
       ),
       Padding(
@@ -611,7 +616,9 @@ class _ForumPreferencesPageState extends ConsumerState<ForumPreferencesPage> {
             return PaneFilmstrip(
               masterWidth: wide ? 280 : constraints.maxWidth,
               viewportPanes: wide ? 2 : 1,
-              animate: !MediaQuery.disableAnimationsOf(context),
+              animate:
+                  !(MediaQuery.disableAnimationsOf(context) ||
+                      MediaQuery.reduceMotionOf(context)),
               dividerColor: wide ? Theme.of(context).dividerColor : null,
               master: Scaffold(
                 appBar: AppBar(
@@ -631,7 +638,10 @@ class _ForumPreferencesPageState extends ConsumerState<ForumPreferencesPage> {
                   TweenAnimationBuilder<double>(
                     key: ValueKey(('forum-preferences-pane', _section!)),
                     tween: Tween(begin: wide ? 0 : 1, end: 1),
-                    duration: wide && !MediaQuery.disableAnimationsOf(context)
+                    duration:
+                        wide &&
+                            !(MediaQuery.disableAnimationsOf(context) ||
+                                MediaQuery.reduceMotionOf(context))
                         ? const Duration(milliseconds: 220)
                         : Duration.zero,
                     curve: M3eMotion.defaultEffects.curveFor(

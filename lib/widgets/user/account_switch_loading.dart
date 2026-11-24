@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:flutter/material.dart';
 
 import '../../l10n/s.dart';
@@ -71,7 +72,7 @@ class AccountSwitchLoading extends StatelessWidget {
               SizedBox(
                 width: progressWidth,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: context.shapes.borderRadius(999),
                   child: LinearProgressIndicator(
                     minHeight: 4,
                     backgroundColor: scheme.primary.withValues(alpha: 0.12),

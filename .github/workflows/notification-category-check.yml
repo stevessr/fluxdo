@@ -17,17 +17,36 @@ on:
       - 'test/utils/paged_async_notifier_test.dart'
       - 'test/services/discourse_notification_categories_test.dart'
       - '.github/workflows/notification-category-check.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: notification-category-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/notification-category-check.yml
+      patterns: >-
+        ["lib/models/notification_category.dart","lib/pages/notifications_page.dart","lib/providers/notification_list_provider.dart","lib/providers/message_bus/notification_providers.dart","lib/utils/paged_async_notifier.dart","lib/services/discourse/_notifications.dart","lib/l10n/modules/notificationFilter/**","test/models/notification_category_test.dart","test/providers/notification_list_category_switch_test.dart","test/providers/notification_list_pagination_test.dart","test/providers/notification_list_realtime_test.dart","test/utils/paged_async_notifier_test.dart","test/services/discourse_notification_categories_test.dart",".github/workflows/notification-category-check.yml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -37,8 +56,12 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.5'
+          flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
 
       - name: Prepare generated asset directories
         run: mkdir -p assets/certs

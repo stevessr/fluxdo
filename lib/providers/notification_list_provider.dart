@@ -15,6 +15,7 @@ enum NotificationReadFilter {
   unread('unread');
 
   final String apiValue;
+  String? get query => this == all ? null : apiValue;
   const NotificationReadFilter(this.apiValue);
 }
 
@@ -37,8 +38,13 @@ class NotificationListNotifier
   int _historyOffset = 0;
   int _refreshGeneration = 0;
   bool _needsManualLoadMore = false;
-  NotificationReadFilter _filter = NotificationReadFilter.all;
-  NotificationCategory _category = NotificationCategory.all;
+  NotificationListNotifier(
+    this._filter, [
+    this._category = NotificationCategory.all,
+  ]);
+
+  NotificationReadFilter _filter;
+  NotificationCategory _category;
 
   NotificationReadFilter get filter => _filter;
   NotificationCategory get category => _category;
@@ -69,7 +75,7 @@ class NotificationListNotifier
     final service = ref.read(discourseServiceProvider);
 
     if (category == NotificationCategory.all) {
-      final response = await service.getNotifications(filter: filter.apiValue);
+      final response = await service.getNotifications(filter: filter.query);
       return (
         page: PagedPage(
           items: response.notifications,
@@ -108,7 +114,7 @@ class NotificationListNotifier
     _seenRealtimeIds.clear();
     resetPagingState();
     final result = await _fetchFirstPage(category: _category, filter: _filter);
-    if (generation != _refreshGeneration) {
+    if (!ref.mounted || generation != _refreshGeneration) {
       // A selection change already started a newer refresh. Keep its result.
       return state.value ?? const <DiscourseNotification>[];
     }
@@ -330,7 +336,7 @@ class NotificationListNotifier
       for (var page = 0; page < pages; page++) {
         final response = await service.getNotifications(
           offset: offset,
-          filter: filter.apiValue,
+          filter: filter.query,
         );
         // 切换筛选/分类期间完成的旧请求不得写入新分类游标。
         if (generation != _refreshGeneration) {
@@ -384,8 +390,15 @@ class NotificationListNotifier
 
     // 服务端操作已成功：取消所有仍在飞行中的旧分页响应。
     // 否则旧的 unread 结果可能在清空列表后再次发布。
-    ++_refreshGeneration;
+    if (!ref.mounted) return;
     ref.read(notificationCountStateProvider.notifier).markAllRead();
+    await _markAllLocalRead();
+  }
+
+  void markAllLocalRead() => unawaited(_markAllLocalRead());
+
+  Future<void> _markAllLocalRead() async {
+    ++_refreshGeneration;
 
     if (_filter == NotificationReadFilter.unread) {
       _totalRows = 0;
@@ -447,10 +460,35 @@ class NotificationListNotifier
   }
 }
 
-final notificationListProvider =
-    AsyncNotifierProvider.autoDispose<
+final notificationListProvider = AsyncNotifierProvider.family
+    .autoDispose<
       NotificationListNotifier,
-      List<DiscourseNotification>
-    >(() {
-      return NotificationListNotifier();
-    });
+      List<DiscourseNotification>,
+      NotificationReadFilter
+    >(NotificationListNotifier.new);
+
+/// Each category owns its history cursor and scroll-independent data.
+final notificationCategoryHistoryProvider = AsyncNotifierProvider.family
+    .autoDispose<
+      NotificationListNotifier,
+      List<DiscourseNotification>,
+      NotificationCategory
+    >(
+      (category) =>
+          NotificationListNotifier(NotificationReadFilter.all, category),
+    );
+
+/// Iterate without reading providers so background events never instantiate tabs.
+Iterable<
+  AsyncNotifierProvider<NotificationListNotifier, List<DiscourseNotification>>
+>
+notificationHistoryProviders() sync* {
+  for (final filter in NotificationReadFilter.values) {
+    yield notificationListProvider(filter);
+  }
+  for (final category in NotificationCategory.values) {
+    if (category != NotificationCategory.all) {
+      yield notificationCategoryHistoryProvider(category);
+    }
+  }
+}

@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/chat/chat_models.dart';
 import '../../providers/chat_providers.dart';
-import '../../utils/time_utils.dart';
-import '../../utils/url_helper.dart';
+import '../../widgets/chat/chat_thread_preview_card.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
-import '../../widgets/common/smart_avatar.dart';
 import 'chat_thread_sheet.dart';
 
 /// 频道消息串列表（对齐 Discourse chat.channel.threads）
@@ -35,13 +33,6 @@ class ChatThreadListSheet extends ConsumerWidget {
       contentPadding: EdgeInsets.zero,
       bodyBuilder: (ctx, _) =>
           ChatThreadListSheet(channelId: channelId, channelTitle: channelTitle),
-    );
-  }
-
-  String? _avatarUrl(ChatUser? user) {
-    if (user?.avatarTemplate == null) return null;
-    return UrlHelper.resolveUrlWithCdn(
-      user!.avatarTemplate!.replaceAll('{size}', '48'),
     );
   }
 
@@ -113,84 +104,13 @@ class ChatThreadListSheet extends ConsumerWidget {
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
             itemCount: threads.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 4),
+            separatorBuilder: (_, _) => const Divider(height: 1, indent: 16, endIndent: 16),
             itemBuilder: (context, index) {
               final thread = threads[index];
               final om = thread.originalMessage;
-              final avatar = _avatarUrl(om?.user);
-              final replyCount =
-                  thread.preview?.replyCount ?? thread.replyCount;
-              final lastAt = thread.preview?.lastReplyCreatedAt;
-              final time = lastAt != null
-                  ? TimeUtils.formatRelativeTime(lastAt)
-                  : (om?.createdAt != null
-                        ? TimeUtils.formatRelativeTime(om!.createdAt!)
-                        : null);
-
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                tileColor: theme.colorScheme.surfaceContainerLow,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                leading: SmartAvatar(
-                  imageUrl: avatar,
-                  radius: 20,
-                  fallbackText: om?.user?.username,
-                ),
-                title: Text(
-                  thread.displayTitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.forum_outlined,
-                        size: 14,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        replyCount > 0 ? '$replyCount 条回复' : '消息串',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                      if (om?.user?.username != null) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            '@${om!.user!.username}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (time != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          time,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
+              return ChatThreadListItem(
+                key: ValueKey(thread.id),
+                thread: thread,
                 onTap: () async {
                   // 先关列表再开详情，避免多层 sheet 叠太深
                   Navigator.pop(context);

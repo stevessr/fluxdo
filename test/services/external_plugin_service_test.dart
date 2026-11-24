@@ -45,21 +45,16 @@ void main() {
     expect(plugins.single.appearsInEditor, isTrue);
   });
 
-  test('工具型插件不占用编辑器入口，旧 APK 缺少类型时按工具处理', () {
-    final app = ExternalPlugin.fromPlatformValue({
-      'id': 'store.plugin/store.plugin.MainActivity',
-      'packageName': 'store.plugin',
-      'label': 'LD 士多',
-      'category': 'app',
-    });
-    expect(app, isNotNull);
-    expect(app!.appearsInEditor, isFalse);
-    final legacy = ExternalPlugin.fromPlatformValue({
-      'id': 'legacy.plugin/legacy.plugin.MainActivity',
-      'packageName': 'legacy.plugin',
-      'label': '旧插件',
-    });
-    expect(legacy!.appearsInEditor, isFalse);
+  test('仅 editor 类别显示在表情面板', () {
+    for (final category in ['editor', 'app', 'unknown', null, 1]) {
+      final plugin = ExternalPlugin.fromPlatformValue({
+        'id': 'example.plugin/Main',
+        'packageName': 'example.plugin',
+        'label': 'Plugin',
+        if (category != null) 'category': category,
+      });
+      expect(plugin!.appearsInEditor, category == 'editor');
+    }
   });
 
   test('启动只向原生层提交已发现的组件标识', () async {
@@ -77,6 +72,20 @@ void main() {
     expect(await ExternalPluginService(channel: channel).launchPlugin(plugin), isTrue);
   });
 
+  test('launch forwards optional appearance without changing plugin identity', () async {
+    const plugin = ExternalPlugin(
+      id: 'example.plugin/Main', packageName: 'example.plugin', label: 'Generator',
+    );
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'launchPlugin');
+      expect(call.arguments, {'id': plugin.id, 'theme': '{"version":1}'});
+      return true;
+    });
+    expect(await ExternalPluginService(channel: channel).launchPlugin(
+      plugin, themeSnapshot: '{"version":1}',
+    ), isTrue);
+  });
+
   test('未安装或原生通道不可用时显示空列表并安全回退', () async {
     final service = ExternalPluginService(channel: channel);
     expect(await service.installedPlugins(), isEmpty);
@@ -86,6 +95,45 @@ void main() {
       label: '表情生成器',
     );
     expect(await service.launchPlugin(plugin), isFalse);
+  });
+
+  test('generated image is delivered once to the initiating composer', () async {
+    final service = ExternalPluginService(channel: channel);
+    const plugin = ExternalPlugin(id: 'example.plugin/Main', packageName: 'example.plugin', label: 'Generator');
+    messenger.setMockMethodCallHandler(channel, (_) async => true);
+    final received = <GeneratedPluginImage>[];
+    expect(await service.launchPlugin(plugin, onGeneratedImage: received.add), isTrue);
+    final payload = const StandardMethodCodec().encodeMethodCall(MethodCall('generatedImage', {
+      'bytes': Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]),
+      'fileName': 'stevessr_generated.png',
+    }));
+    await messenger.handlePlatformMessage(channel.name, payload, (_) {});
+    await messenger.handlePlatformMessage(channel.name, payload, (_) {});
+    expect(received, hasLength(1));
+  });
+
+  test('generated image handoff validates name, type and size', () {
+    final bytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+    final image = GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': 'stevessr_generated.png',
+    });
+    expect(image, isNotNull);
+    expect(image!.bytes, same(bytes));
+    expect(image.fileName, 'stevessr_generated.png');
+
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': '../unsafe.png',
+    }), isNull);
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': bytes,
+      'fileName': 'stevessr_generated.svg',
+    }), isNull);
+    expect(GeneratedPluginImage.fromPlatformValue({
+      'bytes': Uint8List(12 * 1024 * 1024 + 1),
+      'fileName': 'stevessr_generated.png',
+    }), isNull);
   });
 
   test('非 Android 平台不会尝试调用原生插件通道', () async {

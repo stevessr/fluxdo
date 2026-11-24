@@ -22,31 +22,37 @@ class _ExtendedPagePosition extends _PagePosition {
     }
   }
 
-  // fix viewportDimension
+  double get _viewportWithoutSpacing => super.viewportDimension;
+
+  // 翻页吸附使用含页间距的距离。
   @override
-  double get viewportDimension => super.viewportDimension + pageSpacing;
+  double get viewportDimension => _viewportWithoutSpacing + pageSpacing;
+
+  @override
+  void absorb(ScrollPosition other) {
+    super.absorb(other);
+    if (other is _ExtendedPagePosition && other.hasViewportDimension) {
+      // ScrollPosition.absorb 通过公开的 viewportDimension 复制尺寸，已包含旧页间距。
+      // 底层布局只存实际视口，否则重建后会重复加间距，让非首页的图片向右移。
+      super.applyViewportDimension(other._viewportWithoutSpacing);
+    }
+  }
 
   @override
   bool applyViewportDimension(double viewportDimension) {
-    final double? oldViewportDimensions =
-        // fix viewportDimension
-        hasViewportDimension ? this.viewportDimension - pageSpacing : null;
-
-    if (viewportDimension == oldViewportDimensions) {
+    final oldViewport = hasViewportDimension ? _viewportWithoutSpacing : null;
+    if (viewportDimension == oldViewport) {
       return true;
     }
 
-    final bool result = super.applyViewportDimension(viewportDimension);
     final double? oldPixels = hasPixels ? pixels : null;
-    double page;
-    if (oldPixels == null) {
-      page = _pageToUseOnStartup;
-    } else if (oldViewportDimensions == 0.0) {
-      // If resize from zero, we should use the _cachedPage to recover the state.
-      page = _cachedPage!;
-    } else {
-      page = getPageFromPixels(oldPixels, oldViewportDimensions!);
-    }
+    // 先用旧视口的完整翻页距离记住位置，再把同一页映射到新视口。
+    final page =
+        _cachedPage ??
+        (oldPixels != null && oldViewport != null && oldViewport > 0
+            ? getPageFromPixels(oldPixels, this.viewportDimension)
+            : _pageToUseOnStartup);
+    final bool result = super.applyViewportDimension(viewportDimension);
     final double newPixels = getPixelsFromPage(page);
 
     // If the viewportDimension is zero, cache the page

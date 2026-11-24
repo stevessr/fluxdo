@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../../../l10n/s.dart';
+import 'ai_content_block.dart';
 import 'markdown_toolbar.dart';
 
 /// 编辑器工具定义
@@ -156,6 +157,16 @@ final List<EditorTool> editorTools = [
     action: (t) => t.insertQuote(),
   ),
   EditorTool(
+    id: 'aiContent',
+    icon: const Icon(Icons.auto_awesome_outlined),
+    label: (s) => s.editor_aiContent,
+    menuItems: (s) => [
+      for (final block in AiContentBlock.available)
+        PopupMenuItem(value: block.name, child: Text(block.label(s))),
+    ],
+    onMenuSelected: (t, value) => t.insertAiContent(AiContentBlock.values.byName(value)),
+  ),
+  EditorTool(
     id: 'callout',
     icon: const FaIcon(FontAwesomeIcons.noteSticky),
     label: (s) => s.toolPanel_callout,
@@ -211,6 +222,12 @@ final List<EditorTool> editorTools = [
       'hr' => '---',
       _ => '[details="点开看"]\n折叠内容\n[/details]',
     }),
+  ),
+  EditorTool(
+    id: 'specialContent',
+    icon: const FaIcon(FontAwesomeIcons.wandMagicSparkles),
+    label: (s) => s.composer_specialContent,
+    action: (t) => t.insertSpecialContent(),
   ),
   EditorTool(
     id: 'spoiler',

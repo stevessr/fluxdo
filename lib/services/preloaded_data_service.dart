@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show compute, visibleForTesting, ValueNotifier;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../constants.dart';
 import '../models/topic.dart';
@@ -76,6 +76,9 @@ class PreloadedDataService {
 
   /// 是否已加载数据
   bool get isLoaded => _loaded;
+
+  @visibleForTesting
+  Dio get dioForTesting => _dio;
 
   /// 当前已发布的 bootstrap 是否来自持久化快照。
   ///
@@ -224,6 +227,17 @@ class PreloadedDataService {
           .toList();
     }
     return null;
+  }
+
+  /// 获取站点通知类型表（服务端类型名 → 类型 id，含已安装插件的类型）
+  Future<Map<String, int>> getNotificationTypes() async {
+    await _ensureLoaded();
+    final raw = _site?['notification_types'];
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        if (entry.value is int) '${entry.key}': entry.value as int,
+    };
   }
 
   /// 获取帖子操作类型（举报类型等）

@@ -1,8 +1,9 @@
 import 'package:common_ui/common_ui.dart';
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/chat_providers.dart';
@@ -189,7 +190,15 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
                 filled: true,
                 fillColor: theme.colorScheme.surfaceContainerHigh,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -260,10 +269,9 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
         }
         return false;
       },
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         itemCount: _hits.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
           if (index >= _hits.length) {
             return const Padding(
@@ -278,7 +286,12 @@ class _ChatSearchPageState extends ConsumerState<ChatSearchPage> {
             );
           }
           final hit = _hits[index];
-          return _SearchHitTile(hit: hit, onTap: () => _openHit(hit));
+          return SegmentedCardItem(
+            index: index,
+            count: _hits.length,
+            gap: 3,
+            child: _SearchHitTile(hit: hit, onTap: () => _openHit(hit)),
+          );
         },
       ),
     );

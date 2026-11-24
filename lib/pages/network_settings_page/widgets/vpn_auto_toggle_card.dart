@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../../l10n/s.dart';
@@ -37,7 +37,9 @@ class VpnAutoToggleCard extends StatelessWidget {
               secondary: Icon(
                 Symbols.swap_horiz_rounded,
                 fill: enabled ? 1 : 0,
-                color: enabled ? context.emphasis.selected : null,
+                color: enabled
+                    ? context.emphasis.selected
+                    : theme.colorScheme.onSurfaceVariant,
               ),
               value: enabled,
               onChanged: (value) => service.setEnabled(value),

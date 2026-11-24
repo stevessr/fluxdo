@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../l10n/s.dart';
@@ -86,8 +86,8 @@ List<SettingsGroup> buildNetworkGroups(BuildContext context) {
           ),
         CustomModel(
           id: 'cfVerify',
-          title: l10n.cf_securityVerifyTitle,
-          subtitle: l10n.networkSettings_auxiliary,
+          title: l10n.cfVerify_title,
+          subtitle: l10n.cf_securityVerifyTitle,
           builder: (context, ref) => const CfVerifyCard(),
         ),
       ],

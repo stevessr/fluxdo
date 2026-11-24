@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:m3e_ui/m3e_ui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -106,21 +107,21 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: SegmentedButton<PromptType>(
-              segments: [
-                ButtonSegment(
+            child: M3eButtonGroup<PromptType>(
+              items: [
+                M3eButtonGroupItem(
                   value: PromptType.image,
                   label: Text(AiL10n.current.quickPromptsImageTab),
                   icon: const Icon(Symbols.image_rounded),
                 ),
-                ButtonSegment(
+                M3eButtonGroupItem(
                   value: PromptType.text,
                   label: Text(AiL10n.current.quickPromptsTextTab),
                   icon: const Icon(Symbols.chat_rounded),
                 ),
               ],
-              selected: {_type},
-              onSelectionChanged: (s) => setState(() => _type = s.first),
+              selected: _type,
+              onSelected: (type) => setState(() => _type = type),
             ),
           ),
           const SizedBox(height: 12),
@@ -131,8 +132,7 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
                 children: [
                   if (builtIns.isNotEmpty) ...[
                     _SectionLabel(
-                      text: AiL10n.current.quickPromptsBuiltInSection,
-                    ),
+                        text: AiL10n.current.quickPromptsBuiltInSection),
                     _ReorderableGroup(
                       presets: builtIns,
                       type: _type,
@@ -170,7 +170,7 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
 
   void _addNew() {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => PromptPresetEditPage(initialType: _type),
       ),
     );
@@ -178,12 +178,14 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
 
   void _openEdit(PromptPreset preset) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PromptPresetEditPage(preset: preset)),
+      InteractionPageRoute(
+        builder: (_) => PromptPresetEditPage(preset: preset),
+      ),
     );
   }
 
   Future<void> _confirmReset() async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         content: Text(AiL10n.current.quickPromptsResetBuiltInsConfirm),
@@ -199,7 +201,7 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
         ],
       ),
     );
-    if (ok == true) {
+    if (ok == true && mounted) {
       await ref
           .read(promptPresetListProvider.notifier)
           .resetBuiltInsToDefault();
@@ -209,17 +211,17 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
   // ────────────── 导入/导出 ──────────────
 
   static Map<String, dynamic> _presetToExport(PromptPreset p) => {
-    'type': p.type.toJson(),
-    'name': p.name,
-    'iconRaw': p.iconRaw,
-    'promptTemplate': p.promptTemplate,
-    if (p.aspectRatio != null) 'aspectRatio': p.aspectRatio,
-    if (p.tags.isNotEmpty) 'tags': p.tags,
-    if (p.dimensions != null)
-      'dimensions': p.dimensions!.map((d) => d.toJson()).toList(),
-    if (p.defaultDimensionValues != null)
-      'defaultDimensionValues': p.defaultDimensionValues,
-  };
+        'type': p.type.toJson(),
+        'name': p.name,
+        'iconRaw': p.iconRaw,
+        'promptTemplate': p.promptTemplate,
+        if (p.aspectRatio != null) 'aspectRatio': p.aspectRatio,
+        if (p.tags.isNotEmpty) 'tags': p.tags,
+        if (p.dimensions != null)
+          'dimensions': p.dimensions!.map((d) => d.toJson()).toList(),
+        if (p.defaultDimensionValues != null)
+          'defaultDimensionValues': p.defaultDimensionValues,
+      };
 
   static void exportPreset(PromptPreset preset) {
     final json = jsonEncode({
@@ -289,11 +291,9 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
               return ListTile(
                 leading: PresetIcon(iconRaw: p.iconRaw, size: 28),
                 title: Text(p.name),
-                subtitle: Text(
-                  p.type == PromptType.image
-                      ? AiL10n.current.quickPromptsImageTab
-                      : AiL10n.current.quickPromptsTextTab,
-                ),
+                subtitle: Text(p.type == PromptType.image
+                    ? AiL10n.current.quickPromptsImageTab
+                    : AiL10n.current.quickPromptsTextTab),
                 dense: true,
               );
             },
@@ -318,15 +318,13 @@ class _PromptPresetsPageState extends ConsumerState<PromptPresetsPage> {
     final notifier = ref.read(promptPresetListProvider.notifier);
     var count = 0;
     for (final p in parsed) {
-      await notifier.addUserPreset(
-        p.copyWith(
-          id: uuid.v4(),
-          builtIn: false,
-          hidden: false,
-          pinned: false,
-          sortOrder: 999 + count,
-        ),
-      );
+      await notifier.addUserPreset(p.copyWith(
+        id: uuid.v4(),
+        builtIn: false,
+        hidden: false,
+        pinned: false,
+        sortOrder: 999 + count,
+      ));
       count++;
     }
     AiToastDelegate.showSuccess(AiL10n.current.presetImportCount(count));
@@ -415,9 +413,8 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
                       ? AiL10n.current.quickPromptsUnhide
                       : AiL10n.current.quickPromptsHide,
                   onPressed: () {
-                    final notifier = ref.read(
-                      promptPresetListProvider.notifier,
-                    );
+                    final notifier =
+                        ref.read(promptPresetListProvider.notifier);
                     if (preset.hidden) {
                       notifier.unhide(preset.id);
                     } else {
@@ -441,7 +438,7 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
                   label: AiL10n.current.delete,
                   onPressed: () async {
                     final ok = await _confirmDelete(context, preset.name);
-                    if (ok) {
+                    if (ok && mounted) {
                       await ref
                           .read(promptPresetListProvider.notifier)
                           .deletePreset(preset.id);
@@ -586,7 +583,7 @@ class _ReorderableGroupState extends ConsumerState<_ReorderableGroup> {
   }
 
   Future<bool> _confirmDelete(BuildContext context, String name) async {
-    final result = await showDialog<bool>(
+    final result = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         content: Text(AiL10n.current.quickPromptsDeleteConfirm(name)),

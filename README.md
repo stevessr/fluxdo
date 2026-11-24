@@ -58,7 +58,7 @@ brew install --cask Lingyan000/tap/fluxdo
 
 ### 前置要求
 
-- Flutter SDK 3.47.9（版本由 `.fvmrc` 固定）
+- Flutter SDK 3.50.0（版本由 `.fvmrc` 固定）
 - Rust 工具链（用于编译 DOH 代理）
 - Android Studio / Xcode（移动端开发）
 
@@ -176,6 +176,10 @@ FluxDO 集成了基于 Rust 的 DOH (DNS over HTTPS) 代理，提供：
 本项目基于 [GPL-3.0](LICENSE) 协议开源。
 
 ## 致谢
+
+This project is tested with BrowserStack.
+
+[BrowserStack](https://www.browserstack.com/) 用于真机测试；已完成一次 Android 安装与启动验证（[运行记录](https://github.com/Lingyan000/fluxdo/actions/runs/43710553020)）。
 
 感谢 [Linux.do](https://linux.do/) 社区的所有成员，是你们的真诚、友善、团结、专业让这个社区充满活力。
 

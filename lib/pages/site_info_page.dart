@@ -1,5 +1,5 @@
 import 'package:app_icons/app_icons.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/site_policy_document.dart';
 import '../models/site_info_section.dart';

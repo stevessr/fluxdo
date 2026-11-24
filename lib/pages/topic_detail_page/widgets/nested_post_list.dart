@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:positioned_sliver_list/positioned_sliver_list.dart';
 
@@ -24,11 +25,46 @@ import 'topic_detail_header.dart';
 import 'shared_issue_button.dart';
 import 'topic_more_topics.dart';
 import 'topic_status_notices.dart';
-import 'private_message_participants.dart';
 import 'pending_posts_section.dart';
+
+/// 将下一条主回复操作交给页面浮层，列表负责判断可用性与执行定位。
+class NestedPostListController extends ChangeNotifier
+    implements ValueListenable<VoidCallback?> {
+  VoidCallback? _nextRoot;
+  bool _scheduled = false;
+  bool _disposed = false;
+
+  @override
+  VoidCallback? get value => _nextRoot;
+
+  void _update(VoidCallback? nextRoot) {
+    if (_disposed || _nextRoot == nextRoot) return;
+    _nextRoot = nextRoot;
+    if (_scheduled) return;
+    _scheduled = true;
+    // 列表重建、卸载也会改变操作可用性，帧结束后再通知同层浮动按钮。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _detach(VoidCallback nextRoot) {
+    if (_nextRoot == nextRoot) _update(null);
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _nextRoot = null;
+    super.dispose();
+  }
+}
 
 /// 嵌套视图帖子列表 — 在现有 TopicDetailPage 内替换平铺帖子流
 class NestedPostList extends ConsumerStatefulWidget {
+  final NestedPostListController? controller;
   final NestedTopicState nestedState;
   final NestedTopicParams params;
   final TopicDetail detail;
@@ -39,11 +75,7 @@ class NestedPostList extends ConsumerStatefulWidget {
   final bool isLoggedIn;
   final void Function(PendingPost pending)? onWithdrawPendingPost;
   final void Function(PendingPost pending)? onWithdrawAndEditPendingPost;
-  final int? removingPrivateMessageParticipantId;
-  final String? removingPrivateMessageGroupName;
-  final ValueChanged<TopicUser>? onRemovePrivateMessageParticipant;
-  final ValueChanged<TopicGroup>? onRemovePrivateMessageGroup;
-  final VoidCallback? onInvitePrivateMessageParticipants;
+  final VoidCallback? onShowMembers;
   final void Function(Post? replyToPost, {String? initialContent}) onReply;
   final void Function(Post post) onEdit;
   final void Function(int postId) onRefreshPost;
@@ -72,13 +104,17 @@ class NestedPostList extends ConsumerStatefulWidget {
   final NestedReadingPosition? resumePosition;
   final NestedReadingPosition? restorePosition;
   final int? fullTargetPostNumber;
+  /// 页面在切换视图前加载的完整定位路径，避免换视图后再次请求失败。
+  final List<int>? fullTargetPath;
   final bool active;
   final ValueChanged<NestedReadingPosition>? onPositionChanged;
   final VoidCallback? onResume;
   final VoidCallback? onFullTargetConsumed;
   final ValueChanged<int>? onViewportPostChanged;
+  final ValueChanged<bool>? onPositioned;
   const NestedPostList({
     super.key,
+    this.controller,
     required this.nestedState,
     required this.params,
     required this.detail,
@@ -89,11 +125,7 @@ class NestedPostList extends ConsumerStatefulWidget {
     required this.isLoggedIn,
     this.onWithdrawPendingPost,
     this.onWithdrawAndEditPendingPost,
-    this.removingPrivateMessageParticipantId,
-    this.removingPrivateMessageGroupName,
-    this.onRemovePrivateMessageParticipant,
-    this.onRemovePrivateMessageGroup,
-    this.onInvitePrivateMessageParticipants,
+    this.onShowMembers,
     required this.onReply,
     required this.onEdit,
     required this.onRefreshPost,
@@ -113,11 +145,13 @@ class NestedPostList extends ConsumerStatefulWidget {
     this.resumePosition,
     this.restorePosition,
     this.fullTargetPostNumber,
+    this.fullTargetPath,
     this.active = true,
     this.onPositionChanged,
     this.onResume,
     this.onFullTargetConsumed,
     this.onViewportPostChanged,
+    this.onPositioned,
   });
 
   @override
@@ -140,7 +174,6 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
   int _operation = 0;
   int? _handledFullTarget;
   NestedReadingPosition? _lastPosition;
-  final ValueNotifier<int?> _currentRoot = ValueNotifier(null);
 
   @override
   void initState() {
@@ -187,6 +220,9 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
   @override
   void didUpdateWidget(covariant NestedPostList oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller?._detach(_nextRoot);
+    }
     if (widget.fullTargetPostNumber == null) _handledFullTarget = null;
     if (widget.nestedState.sort != oldWidget.nestedState.sort) {
       _session.branches.clear();
@@ -194,8 +230,16 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
       _session.sort = widget.nestedState.sort;
       _scrolledToTarget = null;
     }
+    if (widget.restorePosition != null &&
+        widget.restorePosition != oldWidget.restorePosition) {
+      _expansionState
+        ..clear()
+        ..addAll(widget.restorePosition!.expanded);
+    }
     if (widget.fullTargetPostNumber != null &&
-        widget.fullTargetPostNumber != _handledFullTarget) {
+        (widget.fullTargetPostNumber != _handledFullTarget ||
+            widget.relocateToken != oldWidget.relocateToken)) {
+      _handledFullTarget = null;
       unawaited(_revealFullTarget(widget.fullTargetPostNumber!));
     } else if (widget.nestedState.targetPostNumber !=
             oldWidget.nestedState.targetPostNumber ||
@@ -305,13 +349,15 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
   }
 
   Future<void> _positionContext() async {
-    final target = widget.nestedState.targetPostNumber;
+    final target =
+        widget.restorePosition?.postNumber ?? widget.nestedState.targetPostNumber;
     if (!widget.nestedState.contextMode ||
         target == null ||
         _scrolledToTarget == target) {
       return;
     }
     final operation = ++_operation;
+    final onPositioned = widget.onPositioned;
     _restoring = true;
     _highlightTarget = target;
     final restore = widget.restorePosition;
@@ -322,6 +368,10 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
     _scrolledToTarget = target;
     setState(() => _restoring = false);
     _viewport.scheduleSample();
+    await _nextFrame();
+    if (mounted && operation == _operation) {
+      onPositioned?.call(_viewport.find(target) != null);
+    }
   }
 
   Future<void> _revealFullTarget(
@@ -331,7 +381,9 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
     if (_handledFullTarget == target) return;
     _handledFullTarget = target;
     final operation = ++_operation;
+    final onPositioned = widget.onPositioned;
     _restoring = true;
+    var succeeded = false;
     try {
       if (target <= 1) {
         await _nextFrame();
@@ -341,6 +393,7 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
           await _alignPost(target, widget.restorePosition!.offset);
         }
         if (mounted) widget.onFullTargetConsumed?.call();
+        succeeded = true;
         return;
       }
       final notifier = ref.read(nestedTopicProvider(widget.params).notifier);
@@ -349,7 +402,7 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
         await notifier.changeSort(desiredSort);
         if (!mounted) return;
       }
-      final path = await notifier.revealPost(target);
+      final path = widget.fullTargetPath ?? await notifier.revealPost(target);
       if (!mounted || operation != _operation) return;
       for (final post in path) {
         _expansionState[post] = true;
@@ -379,6 +432,7 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
         throw StateError('Target body unavailable');
       }
       if (mounted) widget.onFullTargetConsumed?.call();
+      succeeded = true;
     } catch (_) {
       if (mounted) widget.onFullTargetConsumed?.call();
       if (mounted) {
@@ -391,12 +445,17 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
         _restoring = false;
         setState(() {});
         _viewport.scheduleSample();
+        await _nextFrame();
+        if (mounted && operation == _operation) {
+          onPositioned?.call(succeeded);
+        }
       }
     }
   }
 
   void _onSample(Set<int> visible, NestedReadingPosition? position) {
     if (!widget.active) {
+      widget.controller?._update(null);
       widget.onVisiblePostsChanged?.call({});
       return;
     }
@@ -410,9 +469,10 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
       sort: widget.nestedState.sort,
       expanded: Map.of(_expansionState),
     );
+    final previousRoot = _lastPosition?.rootPostNumber;
     _lastPosition = saved;
     _anchorReadingPost(saved.postNumber);
-    _currentRoot.value = saved.rootPostNumber;
+    if (previousRoot != saved.rootPostNumber) _updateNextRoot();
     widget.onViewportPostChanged?.call(saved.postNumber);
     _session
       ..position = saved
@@ -453,7 +513,26 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
     await ref.read(nestedTopicProvider(widget.params).notifier).loadNewRoots();
   }
 
+  void _updateNextRoot() {
+    final ns = widget.nestedState;
+    final current = _lastPosition?.rootPostNumber;
+    final roots = BlockedUserFilter.visibleNestedNodes(
+      ns.roots,
+      widget.blockedUsernames,
+    );
+    final index = roots.indexWhere((node) => node.post.postNumber == current);
+    final hasNext =
+        widget.active &&
+        !ns.contextMode &&
+        roots.isNotEmpty &&
+        current != null &&
+        (current == 1 || index >= 0) &&
+        (index + 1 < roots.length || ns.hasMoreRoots);
+    widget.controller?._update(hasNext ? _nextRoot : null);
+  }
+
   Future<void> _nextRoot() async {
+    if (!mounted) return;
     final current = _lastPosition?.rootPostNumber;
     final roots = BlockedUserFilter.visibleNestedNodes(
       widget.nestedState.roots,
@@ -479,12 +558,12 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
   @override
   void dispose() {
     ++_operation;
+    widget.controller?._detach(_nextRoot);
     _cancelReadingAnchor();
     _listController.itemPositions.removeListener(_viewport.scheduleSample);
     _listController.dispose();
     widget.scrollController.removeListener(_onScroll);
     _viewport.dispose();
-    _currentRoot.dispose();
     super.dispose();
   }
 
@@ -497,22 +576,9 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
     };
   }
 
-  PrivateMessageParticipants _buildPrivateMessageParticipants(
-    PrivateMessageParticipantsLocation location,
-  ) {
-    return PrivateMessageParticipants.fromDetail(
-      location: location,
-      detail: widget.detail,
-      removingParticipantId: widget.removingPrivateMessageParticipantId,
-      removingGroupName: widget.removingPrivateMessageGroupName,
-      onRemoveParticipant: widget.onRemovePrivateMessageParticipant,
-      onRemoveGroup: widget.onRemovePrivateMessageGroup,
-      onInvite: widget.onInvitePrivateMessageParticipants,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    _updateNextRoot();
     final maxDepth = _getMaxDepth(context);
 
     // 各帖正文通过独立几何锚点上报可见性。
@@ -538,6 +604,7 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
         key: 'header',
         builder: (context) => TopicDetailHeader(
           detail: widget.detail,
+          onShowMembers: widget.onShowMembers,
           headerKey: widget.headerKey,
           showTitle: !widget.hideHeaderTitle,
           onVoteChanged: widget.onVoteChanged,
@@ -607,15 +674,6 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
                     )
                   : null,
             ),
-          ),
-        ),
-
-      if (opPost != null &&
-          PrivateMessageParticipants.shouldShow(widget.detail))
-        (
-          key: 'pm-first',
-          builder: (context) => _buildPrivateMessageParticipants(
-            PrivateMessageParticipantsLocation.firstPost,
           ),
         ),
 
@@ -748,15 +806,9 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
       if (!contextMode && !ns.hasMoreRoots)
         (
           key: 'suggested',
-          builder: (context) => MoreTopicsSection(detail: widget.detail),
-        ),
-
-      if (!ns.hasMoreRoots &&
-          PrivateMessageParticipants.shouldShowAtBottom(widget.detail))
-        (
-          key: 'pm-bottom',
-          builder: (context) => _buildPrivateMessageParticipants(
-            PrivateMessageParticipantsLocation.bottom,
+          builder: (context) => MoreTopicsSection(
+            detail: widget.detail,
+            relatedMessages: ns.relatedMessages,
           ),
         ),
 
@@ -792,6 +844,7 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
               ++_operation;
               _listController.cancelPositioning();
               setState(() => _restoring = false);
+              widget.onPositioned?.call(false);
             }
           }
           if (notification is ScrollEndNotification) _viewport.scheduleSample();
@@ -816,31 +869,6 @@ class _NestedPostListState extends ConsumerState<NestedPostList> {
                 right: 0,
                 child: LinearProgressIndicator(),
               ),
-            PositionedDirectional(
-              end: 16,
-              bottom: 100 + MediaQuery.paddingOf(context).bottom,
-              child: !contextMode && roots.isNotEmpty
-                  ? ValueListenableBuilder<int?>(
-                      valueListenable: _currentRoot,
-                      builder: (context, current, _) {
-                        final index = roots.indexWhere(
-                          (node) => node.post.postNumber == current,
-                        );
-                        final hasNext =
-                            current != null &&
-                            (current == 1 || index >= 0) &&
-                            (index + 1 < roots.length || ns.hasMoreRoots);
-                        if (!hasNext) return const SizedBox.shrink();
-                        return FloatingActionButton(
-                          heroTag: null,
-                          tooltip: context.l10n.nested_nextRoot,
-                          onPressed: _nextRoot,
-                          child: const Icon(Icons.skip_next_rounded),
-                        );
-                      },
-                    )
-                  : const SizedBox.shrink(),
-            ),
           ],
         ),
       ),

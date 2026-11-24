@@ -1,13 +1,83 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:fluxdo/l10n/s.dart';
+import 'package:fluxdo/settings/definitions/appearance_defs.dart';
+import 'package:fluxdo/settings/definitions/reading_defs.dart';
 import 'package:fluxdo/providers/preferences_provider.dart';
 import 'package:fluxdo/widgets/common/styled_emoji_image.dart';
+import 'package:fluxdo/services/fonts/emoji_font_service.dart';
 
 void main() {
+  testWidgets('Emoji type and artwork are adjacent in the same appearance section', (tester) async {
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          home: Builder(builder: (context) {
+            final groups = buildAppearanceSectionGroups(
+              context, AppearanceSection.interface,
+            );
+            final group = groups.singleWhere(
+              (group) => group.items.any((item) => item.id == 'emojiStyle'),
+            );
+            expect(group.items.map((item) => item.id),
+                ['emojiRenderStyle', 'emojiStyle']);
+            expect(appearanceSectionForSetting('emojiRenderStyle'),
+                AppearanceSection.interface);
+            expect(buildReadingGroups(context).expand((group) => group.items)
+                .map((item) => item.id), isNot(contains('emojiRenderStyle')));
+            return const SizedBox.shrink();
+          }),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   test('invalid or missing emoji style settings remain normal', () {
     expect(EmojiRenderStyle.fromString(null), EmojiRenderStyle.normal);
     expect(EmojiRenderStyle.fromString('unknown'), EmojiRenderStyle.normal);
     expect(EmojiRenderStyle.fromString('animated'), EmojiRenderStyle.animated);
     expect(EmojiRenderStyle.fromString('threeD'), EmojiRenderStyle.threeD);
+  });
+
+  test('selected Google style is strictly scoped to floor body', () {
+    for (final selected in [
+      EmojiRenderStyle.animated,
+      EmojiRenderStyle.threeD,
+    ]) {
+      expect(
+        EmojiStyleAssets.effectiveStyle(selected, usePostStyle: false),
+        EmojiRenderStyle.normal,
+      );
+      expect(
+        EmojiStyleAssets.effectiveStyle(selected, usePostStyle: true),
+        selected,
+      );
+    }
+  });
+
+  test('static styles use Discourse artwork including aliases and skin tones', () {
+    for (final set in ['noto', 'twemoji', 'fluentui', 'openmoji', 'unicode']) {
+      expect(EmojiStyleAssets.staticUrlFor('grinning', set),
+        'https://emoji.discourse-cdn.com/$set/grinning.png?v=16');
+      expect(EmojiStyleAssets.staticUrlFor('wave:t2', set, pinned: true),
+        contains('/dist/emoji/$set/wave/2.png'));
+    }
+    expect(EmojiStyleAssets.staticUrlFor('grinning', 'site'), isNull);
+    expect(EmojiStyleAssets.staticUrlFor('../unsafe', 'noto'), isNull);
+  });
+
+  test('font path rejects missing and complex glyphs', () {
+    const face = EmojiFontFace('Test', {0x1f600, 0x2764});
+    expect(face.glyphFor('1f600'), '😀');
+    expect(face.glyphFor('2764_fe0f'), '❤');
+    expect(face.glyphFor('1f680'), isNull);
+    expect(face.glyphFor('1f469_200d_1f4bb'), isNull);
+    expect(face.glyphFor('1f1e8_1f1f3'), isNull);
+    expect(face.glyphFor('1f44d_1f3fd'), isNull);
+    expect(face.glyphFor('31_fe0f_20e3'), isNull);
+    expect(EmojiFontSpec.bySet.keys, containsAll(['noto', 'twemoji', 'openmoji']));
+    expect(EmojiFontSpec.bySet['fluentui'], isNull);
   });
 
   test('normal style does not request third-party artwork', () {

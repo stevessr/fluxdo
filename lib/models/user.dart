@@ -1,4 +1,6 @@
 import 'package:fluxdo/utils/avatar_url.dart';
+
+import 'notification.dart';
 import '../l10n/s.dart';
 import '../utils/time_utils.dart';
 import '../utils/url_helper.dart';
@@ -33,6 +35,9 @@ class User {
   final int unreadNotifications;
   final int unreadHighPriorityNotifications;
   final int allUnreadNotificationsCount;
+
+  /// 按通知类型 id 分组的未读数
+  final Map<int, int> groupedUnreadNotifications;
   final int seenNotificationId;
   final int notificationChannelPosition;
 
@@ -145,6 +150,7 @@ class User {
     this.unreadNotifications = 0,
     this.unreadHighPriorityNotifications = 0,
     this.allUnreadNotificationsCount = 0,
+    this.groupedUnreadNotifications = const {},
     this.seenNotificationId = 0,
     this.notificationChannelPosition = -1,
     this.pendingPostsCount = 0,
@@ -200,6 +206,7 @@ class User {
     int? unreadNotifications,
     int? unreadHighPriorityNotifications,
     int? allUnreadNotificationsCount,
+    Map<int, int>? groupedUnreadNotifications,
     int? seenNotificationId,
     int? notificationChannelPosition,
     String? cardBackgroundUploadUrl,
@@ -218,7 +225,8 @@ class User {
       id: id,
       username: username,
       name: identity != null ? identity.name : name,
-      avatarTemplate: avatarTemplate ??
+      avatarTemplate:
+          avatarTemplate ??
           (identity != null ? identity.avatarTemplate : this.avatarTemplate),
       animatedAvatar: avatarTemplate != null
           ? null
@@ -244,6 +252,8 @@ class User {
           this.unreadHighPriorityNotifications,
       allUnreadNotificationsCount:
           allUnreadNotificationsCount ?? this.allUnreadNotificationsCount,
+      groupedUnreadNotifications:
+          groupedUnreadNotifications ?? this.groupedUnreadNotifications,
       seenNotificationId: seenNotificationId ?? this.seenNotificationId,
       notificationChannelPosition:
           notificationChannelPosition ?? this.notificationChannelPosition,
@@ -349,6 +359,9 @@ class User {
           json['unread_high_priority_notifications'] as int? ?? 0,
       allUnreadNotificationsCount:
           json['all_unread_notifications_count'] as int? ?? 0,
+      groupedUnreadNotifications: parseGroupedUnread(
+        json['grouped_unread_notifications'],
+      ),
       seenNotificationId: json['seen_notification_id'] as int? ?? 0,
       notificationChannelPosition:
           json['notification_channel_position'] as int? ?? -1,
@@ -525,6 +538,7 @@ class User {
 class UserStatus {
   final String? description;
   final String? emoji;
+
   /// 状态结束时间（UTC），到期后状态不再展示。
   final DateTime? endsAt;
 

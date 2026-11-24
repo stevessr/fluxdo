@@ -1,3 +1,4 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
 import 'package:flutter/material.dart';
 
 import '../../l10n/s.dart';
@@ -81,7 +82,7 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: context.shapes.borderRadius(10),
             ),
             child: Text(
               '$count',
@@ -105,7 +106,7 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Material(
             color: theme.colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: context.shapes.borderRadius(12),
             clipBehavior: Clip.antiAlias,
             child: TabBar(
               key: ValueKey('chat-${widget.id}-subtabs'),
@@ -114,7 +115,7 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
                 color: theme.colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: context.shapes.borderRadius(10),
               ),
               labelColor: theme.colorScheme.onSecondaryContainer,
               unselectedLabelColor: theme.colorScheme.onSurfaceVariant,

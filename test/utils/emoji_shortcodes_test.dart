@@ -11,6 +11,57 @@ void main() {
       expect(normalizeEmojiShortcodeName('  :smile:  '), 'smile');
     });
 
+    test('展示层按官方规则识别短代码', () {
+      List<String> names(String text, {bool inline = false}) => [
+        for (final m in displayEmojiShortcodeMatches(text, inline: inline))
+          m.group(1)!,
+      ];
+
+      expect(names(':smile:'), ['smile']);
+      expect(names('Hi :smile:!'), ['smile']);
+      expect(names('好的，:smile:'), ['smile']);
+      expect(names(':smile::heart:'), ['smile', 'heart']);
+      expect(names('😀:heart:'), ['heart']);
+      expect(names(':+1:t3: 和 :piñata:'), ['+1:t3', 'piñata']);
+      // 紧贴文字、时间与英文单词里的冒号不转
+      expect(names('谢谢:smile:'), isEmpty);
+      expect(names('12:30:45'), isEmpty);
+      expect(names('a:smile:'), isEmpty);
+      expect(names(':smile:abc'), isEmpty);
+      // 站点开启行内转换后任意位置都转
+      expect(names('谢谢:smile:', inline: true), ['smile']);
+    });
+
+    test('只转换存在的表情', () {
+      List<String> names(String text) => [
+        for (final m in EmojiHandler.shortcodeMatches(text, inline: true))
+          m.group(1)!,
+      ];
+
+      // 别名、肤色变体、大小写同官方
+      expect(names(':smile::thumbsup::+1:t3::Heart:'), [
+        'smile',
+        'thumbsup',
+        '+1:t3',
+        'Heart',
+      ]);
+      // 格式像短代码但不是表情,保持原文
+      expect(names('qwen3:14b和qwen3:30b-a3b'), isEmpty);
+      expect(names(':not_an_emoji: :smile:'), ['smile']);
+    });
+
+    test('HTML 里的 emoji 图片还原成短代码', () {
+      expect(
+        emojiImagesToShortcodes(
+          '好<img src="/images/emoji/twitter/smile.png?v=16" '
+          'title=":smile:" class="emoji" alt=":smile:" loading="lazy">'
+          "<img class='emoji emoji-custom' alt=':bili_114:'>"
+          '<img src="/uploads/a.png" alt="照片">',
+        ),
+        '好:smile::bili_114:<img src="/uploads/a.png" alt="照片">',
+      );
+    });
+
     test('counts emoji shortcodes as a single visible character', () {
       expect(visibleLengthWithEmojiShortcodes('abc'), 3);
       expect(visibleLengthWithEmojiShortcodes(':smile:'), 1);

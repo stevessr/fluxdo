@@ -16,6 +16,8 @@
   },
   "post_acceptSolution": "採納為解決方案",
   "post_collapseReplies": "收起回覆",
+  "post_unfoldFullText": "展開全文",
+  "post_foldFullText": "收起全文",
   "post_contentRequired": "請輸入內容",
   "post_deleteReplyConfirm": "確定要刪除這條回覆嗎？此操作可以撤銷。",
   "post_deleteReplyTitle": "刪除回覆",
@@ -106,17 +108,8 @@
       }
     }
   },
-  "post_replyCount": "{count} 條回覆",
-  "@post_replyCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "post_replySent": "回覆已發送",
   "post_replySentAction": "查看",
-  "post_replyTo": "回覆給",
   "post_replyToTopic": "回覆話題",
   "post_replyAsNewTopic": "回覆為關連的話題",
   "post_replyAsNewPrivateMessage": "回覆作為新訊息給同一收件人",
@@ -150,6 +143,13 @@
   "pm_recipientHint": "搜尋用戶或群組",
   "pm_newTitle": "新建私信",
   "pm_inviteParticipants": "邀請成員",
+  "pm_conversationMembers": "對話成員",
+  "pm_privateMessage": "私訊",
+  "pm_memberSeparator": "、",
+  "pm_alreadyJoined": "已加入",
+  "pm_leaveConversation": "退出對話",
+  "pm_inviteCount": "邀請 {count} 項",
+  "pm_inviteFailedRetry": "邀請未完成，可重試以下對象：{names}",
   "pm_inviteParticipantsHint": "搜索用戶或可發私信的群組，加入本次私信。",
   "pm_inviteSucceeded": "已邀請",
   "pm_invitePartiallyFailed": "部分邀請失敗：{names}",
@@ -226,7 +226,9 @@
   "postVoting_answerCount": "{count} 個回答",
   "@postVoting_answerCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_sortVotes": "按票數",
@@ -235,7 +237,9 @@
   "postVoting_commentSheetTitle": "評論 @{username} 的帖子",
   "@postVoting_commentSheetTitle": {
     "placeholders": {
-      "username": {"type": "String"}
+      "username": {
+        "type": "String"
+      }
     }
   },
   "postVoting_commentSubmit": "發表",
@@ -244,13 +248,17 @@
   "postVoting_commentTooShort": "至少需要 {count} 個字符",
   "@postVoting_commentTooShort": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_commentsMore": "還有 {count} 條評論",
   "@postVoting_commentsMore": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_noVoters": "暫無投票",
@@ -259,7 +267,9 @@
   "postVoting_votersMore": "共 {count} 人投票,僅顯示最近 20 人",
   "@postVoting_votersMore": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "postVoting_votersTitle": "投票用戶",
@@ -286,30 +296,57 @@
   "sharedIssue_rateLimited": "操作太頻繁，請稍後再試",
   "postRevision_indicatorTooltipFirst": "創建於 {time}",
   "@postRevision_indicatorTooltipFirst": {
-    "placeholders": {"time": {"type": "String"}}
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   },
   "postRevision_indicatorTooltipEdited": "最後編輯於 {time}",
   "@postRevision_indicatorTooltipEdited": {
-    "placeholders": {"time": {"type": "String"}}
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   },
   "postRevision_wikiEditTooltip": "wiki · 最後編輯於 {time}",
   "@postRevision_wikiEditTooltip": {
-    "placeholders": {"time": {"type": "String"}}
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   },
   "postRevision_wikiAbout": "wiki 帖子,任何人都可以編輯",
   "postRevision_indicatorDisabled": "冇權限睇編輯歷史",
   "postRevision_modalTitle": "編輯歷史",
   "postRevision_versionLabel": "v{current} / {total}",
   "@postRevision_versionLabel": {
-    "placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
   },
   "postRevision_editedBy": "由 {user} 編輯",
   "@postRevision_editedBy": {
-    "placeholders": {"user": {"type": "String"}}
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
   },
   "postRevision_editReason": "原因:{reason}",
   "@postRevision_editReason": {
-    "placeholders": {"reason": {"type": "String"}}
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
   },
   "postRevision_editReasonEmpty": "冇填寫編輯原因",
   "postRevision_diffInline": "行內對比",
@@ -330,12 +367,20 @@
   "postRevision_revert": "回退到此版本",
   "postRevision_revertConfirmTitle": "回退到版本 {revision}",
   "@postRevision_revertConfirmTitle": {
-    "placeholders": {"revision": {"type": "int"}}
+    "placeholders": {
+      "revision": {
+        "type": "int"
+      }
+    }
   },
   "postRevision_revertConfirmBody": "回退會建立一條新嘅編輯,目標版本嘅內容會作為最新內容寫返。確定繼續?",
   "postRevision_revertSuccess": "已回退到版本 {revision}",
   "@postRevision_revertSuccess": {
-    "placeholders": {"revision": {"type": "int"}}
+    "placeholders": {
+      "revision": {
+        "type": "int"
+      }
+    }
   },
   "postRevision_permanentlyDelete": "永久刪除全部歷史",
   "postRevision_permanentlyDeleteTitle": "永久刪除編輯歷史",
@@ -350,11 +395,19 @@
   "postRevision_actionFailed": "操作失敗,請稍後再試",
   "postRevision_hideSuccess": "已隱藏版本 {revision}",
   "@postRevision_hideSuccess": {
-    "placeholders": {"revision": {"type": "int"}}
+    "placeholders": {
+      "revision": {
+        "type": "int"
+      }
+    }
   },
   "postRevision_showSuccess": "已顯示版本 {revision}",
   "@postRevision_showSuccess": {
-    "placeholders": {"revision": {"type": "int"}}
+    "placeholders": {
+      "revision": {
+        "type": "int"
+      }
+    }
   },
   "postRevision_deleteAllSuccess": "已永久刪除全部編輯歷史",
   "nested_resumeReading": "繼續上次閱讀 · 第 {postNumber} 樓",
@@ -374,5 +427,9 @@
       }
     }
   },
-  "nested_restoreFailed": "暫時無法恢復此位置，請重試"
+  "nested_restoreFailed": "暫時無法恢復此位置，請重試",
+  "post_quoteExpand": "展開",
+  "post_quoteCollapse": "收起",
+  "post_quoteBlocked": "已隱藏來自本機封鎖用戶的引用。",
+  "post_quoteGoToFloor": "前往原帖第 {number} 樓"
 }

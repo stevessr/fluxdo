@@ -273,6 +273,7 @@ open class MainActivity : FlutterActivity() {
     private var mediaTranscodeChannel: MediaTranscodeChannel? = null
     private var browserSafeAreaChannel: BrowserSafeAreaChannel? = null
     private var externalPluginChannel: ExternalPluginChannel? = null
+    private var webViewSurfaceChannel: WebViewSurfaceChannel? = null
 
     // Cookie IPC 专用后台线程。CookieManager 的 getCookie / setCookie /
     // getCookieInfo 可从任意线程调用(Chromium cookie store 在自己的 IO
@@ -312,6 +313,7 @@ open class MainActivity : FlutterActivity() {
 
     // SAF「另存为」建档结果先给 PublicFileChannel 认领,不是它的再交给插件
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (externalPluginChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
         if (publicFileChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
         if (picoVrChannel?.handleActivityResult(requestCode, resultCode, data) == true) return
         super.onActivityResult(requestCode, resultCode, data)
@@ -334,6 +336,8 @@ open class MainActivity : FlutterActivity() {
         browserSafeAreaChannel = null
         externalPluginChannel?.dispose()
         externalPluginChannel = null
+        webViewSurfaceChannel?.dispose()
+        webViewSurfaceChannel = null
         MiniAppWindows.detach()
         FairMemoryReceiver.detachEngine(flutterEngine)
         super.cleanUpFlutterEngine(flutterEngine)
@@ -380,6 +384,8 @@ open class MainActivity : FlutterActivity() {
         browserSafeAreaChannel = BrowserSafeAreaChannel(flutterEngine)
         externalPluginChannel?.dispose()
         externalPluginChannel = ExternalPluginChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        webViewSurfaceChannel?.dispose()
+        webViewSurfaceChannel = WebViewSurfaceChannel(flutterEngine)
         splashChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SPLASH_CHANNEL).also {
             it.setMethodCallHandler { call, result ->
                 when (call.method) {

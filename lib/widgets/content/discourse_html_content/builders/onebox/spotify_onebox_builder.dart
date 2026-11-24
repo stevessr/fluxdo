@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../../../../utils/link_launcher.dart';
@@ -26,7 +27,7 @@ class SpotifyOneboxBuilder {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: context.shapes.borderRadius(8),
           child: IframeWidget(attributes: attrs),
         ),
       );
@@ -98,7 +99,7 @@ class SpotifyOneboxBuilder {
           if (thumbnail.isNotEmpty) ...[
             const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: context.shapes.borderRadius(6),
               child: Image(
                 image: NetworkImage(thumbnail),
                 fit: BoxFit.cover,

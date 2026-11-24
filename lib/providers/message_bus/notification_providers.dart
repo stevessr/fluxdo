@@ -51,16 +51,47 @@ class NotificationCountNotifier extends Notifier<NotificationCountState> {
       allUnread: user.allUnreadNotificationsCount,
       unread: user.unreadNotifications,
       highPriority: user.unreadHighPriorityNotifications,
+      grouped: user.groupedUnreadNotifications,
     );
   }
 
-  void update({int? allUnread, int? unread, int? highPriority}) {
+  void update({
+    int? allUnread,
+    int? unread,
+    int? highPriority,
+    Map<int, int>? grouped,
+  }) {
     _liveUpdateReceived = true;
     state = state.copyWith(
       allUnread: allUnread,
       unread: unread,
       highPriority: highPriority,
+      grouped: grouped,
     );
+  }
+
+  /// 服务端确认后，同步已打开的历史列表、快捷面板及其分类。
+  Future<void> markAllNotificationsRead() async {
+    final requestRef = ref;
+    await requestRef.read(discourseServiceProvider).markAllNotificationsRead();
+    if (!requestRef.mounted) return;
+
+    markAllRead();
+    if (ref.read(recentNotificationsProvider.exists)) {
+      ref.read(recentNotificationsProvider.notifier).markLocalRead();
+    }
+    for (final tab in NotificationPanelTab.values) {
+      if (tab == NotificationPanelTab.all) continue;
+      final provider = categorizedNotificationsProvider(tab);
+      if (ref.read(provider.exists)) {
+        ref.read(provider.notifier).markAllLocalRead();
+      }
+    }
+    for (final provider in notificationHistoryProviders()) {
+      if (ref.read(provider.exists)) {
+        ref.read(provider.notifier).markAllLocalRead();
+      }
+    }
   }
 
   /// 标记所有已读后重置计数(视为实时事实,服务端旧值不得复活徽章)
@@ -125,6 +156,10 @@ class NotificationChannelNotifier extends Notifier<void> {
         final unreadCount = data['unread_notifications'] as int?;
         final unreadHighPriority =
             data['unread_high_priority_notifications'] as int?;
+        final rawGrouped = data['grouped_unread_notifications'];
+        final grouped = rawGrouped == null
+            ? null
+            : parseGroupedUnread(rawGrouped);
 
         debugPrint(
           '[Notification] 计数更新: allUnread=$allUnreadCount, unread=$unreadCount, highPriority=$unreadHighPriority',
@@ -133,126 +168,102 @@ class NotificationChannelNotifier extends Notifier<void> {
         // 更新通知计数
         if (allUnreadCount != null ||
             unreadCount != null ||
-            unreadHighPriority != null) {
+            unreadHighPriority != null ||
+            grouped != null) {
           ref
               .read(notificationCountStateProvider.notifier)
               .update(
                 allUnread: allUnreadCount,
                 unread: unreadCount,
                 highPriority: unreadHighPriority,
+                grouped: grouped,
               );
         }
 
-        // Forward the same event to the full history page only when mounted.
-        // Count-only and recent-only events need a quiet server reconciliation.
-        if (ref.exists(notificationListProvider)) {
-          final historyState = ref.read(notificationListProvider);
-          final notifier = ref.read(notificationListProvider.notifier);
-          if (historyState.hasValue) {
-            DiscourseNotification? latest;
-            final last = data['last_notification'];
-            if (last is Map<String, dynamic>) {
-              final raw = last['notification'];
-              if (raw is Map<String, dynamic>) {
-                try {
-                  latest = DiscourseNotification.fromJson(raw);
-                  if (latest.userId != subscription.id) {
-                    latest = null;
-                  }
-                } catch (_) {
-                  // Some events contain only a counter or a partial payload.
-                }
+        // 新通知（last_notification）与 recent 已读状态，供各列表增量同步
+        DiscourseNotification? newNotification;
+        final lastNotification = data['last_notification'];
+        if (lastNotification is Map<String, dynamic>) {
+          final notification = lastNotification['notification'];
+          if (notification is Map<String, dynamic>) {
+            try {
+              final parsed = DiscourseNotification.fromJson(notification);
+              final blockedUsernames = ref
+                  .read(preferencesProvider)
+                  .normalizedBlockedUsernames;
+              if (!BlockedUserFilter.isBlockedNotification(
+                parsed,
+                blockedUsernames,
+              )) {
+                newNotification = parsed;
+              }
+            } catch (e) {
+              debugPrint('[Notification] 解析新通知失败: $e');
+            }
+          }
+        }
+        final readStatusMap = <int, bool>{};
+        final recent = data['recent'];
+        if (recent is List) {
+          for (final entry in recent) {
+            if (entry is List && entry.length >= 2) {
+              final id = entry[0] as int?;
+              final read = entry[1] as bool?;
+              if (id != null && read != null) {
+                readStatusMap[id] = read;
               }
             }
-            final statuses = <int, bool>{};
-            final recent = data['recent'];
-            if (recent is List) {
-              for (final entry in recent) {
-                if (entry is List &&
-                    entry.length >= 2 &&
-                    entry[0] is int &&
-                    entry[1] is bool) {
-                  statuses[entry[0] as int] = entry[1] as bool;
-                }
-              }
-            }
-            final loadedIds = historyState.value!
-                .map((notification) => notification.id)
-                .toSet();
-            final unseenRecentId = statuses.keys.any(
-              (id) => !loadedIds.contains(id) && id != latest?.id,
-            );
-            notifier.applyRealtimeUpdate(
-              latest: latest,
-              readStatuses: statuses,
-            );
-            // A single last_notification may not cover all recent IDs after
-            // a reconnect. Reconcile without changing the visible selection.
-            if (latest == null || historyState.isLoading || unseenRecentId) {
-              notifier.scheduleRealtimeSync();
-            }
-          } else {
-            // A push may arrive while the first history request is loading.
-            // Reconcile after it completes instead of silently losing it.
+          }
+        }
+
+        // Full history is independent of the recent panel. Update only
+        // mounted history providers and reconcile count-only events quietly.
+        for (final provider in notificationHistoryProviders()) {
+          if (!ref.read(provider.exists)) continue;
+          final history = ref.read(provider);
+          final notifier = ref.read(provider.notifier);
+          final loadedIds = history.value?.map((n) => n.id).toSet() ?? <int>{};
+          notifier.applyRealtimeUpdate(
+            latest: newNotification,
+            readStatuses: readStatusMap,
+          );
+          if (newNotification == null ||
+              history.isLoading ||
+              readStatusMap.keys.any(
+                (id) => !loadedIds.contains(id) && id != newNotification?.id,
+              )) {
             notifier.scheduleRealtimeSync();
           }
         }
 
         // 仅在通知列表已加载（面板已打开过）时做增量更新，
         // 避免 ref.read() 意外触发 build() 发起 API 请求
-        if (ref.exists(recentNotificationsProvider)) {
+        if (ref.read(recentNotificationsProvider.exists)) {
           final recentState = ref.read(recentNotificationsProvider);
           if (recentState.hasValue) {
             final recentNotifier = ref.read(
               recentNotificationsProvider.notifier,
             );
-
-            // 如果有新通知，从 last_notification 中提取并添加到列表
-            final lastNotification = data['last_notification'];
-            if (lastNotification is Map<String, dynamic>) {
-              final notification = lastNotification['notification'];
-              if (notification is Map<String, dynamic>) {
-                try {
-                  final newNotification = DiscourseNotification.fromJson(
-                    notification,
-                  );
-                  final blockedUsernames = ref
-                      .read(preferencesProvider)
-                      .normalizedBlockedUsernames;
-                  if (!BlockedUserFilter.isBlockedNotification(
-                    newNotification,
-                    blockedUsernames,
-                  )) {
-                    debugPrint(
-                      '[Notification] 添加新通知到列表: id=${newNotification.id}',
-                    );
-                    recentNotifier.addNotification(newNotification);
-                  }
-                } catch (e) {
-                  debugPrint('[Notification] 解析新通知失败: $e');
-                }
-              }
+            if (newNotification != null) {
+              debugPrint('[Notification] 添加新通知到列表: id=${newNotification.id}');
+              recentNotifier.addNotification(newNotification);
             }
-
             // 使用 recent 字段同步通知列表（复刻 Discourse 逻辑）
             // recent 同时承担：更新已读状态 + 移除过期通知
-            final recent = data['recent'];
-            if (recent is List) {
-              final readStatusMap = <int, bool>{};
-              for (final entry in recent) {
-                if (entry is List && entry.length >= 2) {
-                  final id = entry[0] as int?;
-                  final read = entry[1] as bool?;
-                  if (id != null && read != null) {
-                    readStatusMap[id] = read;
-                  }
-                }
-              }
-              if (readStatusMap.isNotEmpty) {
-                recentNotifier.syncWithRecent(readStatusMap);
-              }
+            if (readStatusMap.isNotEmpty) {
+              recentNotifier.syncWithRecent(readStatusMap);
             }
           }
+        }
+
+        // 面板分类列表：按类型并入新通知、同步已读状态
+        for (final tab in NotificationPanelTab.values) {
+          if (tab == NotificationPanelTab.all) continue;
+          final provider = categorizedNotificationsProvider(tab);
+          if (!ref.read(provider.exists)) continue;
+          final notifier = ref.read(provider.notifier);
+          if (newNotification != null) notifier.addIfMatches(newNotification);
+          if (readStatusMap.isNotEmpty) notifier.applyReadStatus(readStatusMap);
         }
       }
     }

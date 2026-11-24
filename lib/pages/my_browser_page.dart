@@ -1,5 +1,5 @@
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ai_model_manager/ai_model_manager.dart'
@@ -114,31 +114,28 @@ class _AddressBarState extends State<_AddressBar> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return TextField(
-      controller: _controller,
-      keyboardType: TextInputType.text,
-      textInputAction: TextInputAction.go,
-      decoration: InputDecoration(
-        hintText: context.l10n.webview_addressHint,
-        prefixIcon: const Icon(Symbols.language_rounded),
-        suffixIcon: IconButton(
-          icon: const Icon(Symbols.arrow_forward_rounded),
-          onPressed: () => _submit(),
+    return InputFieldShell(
+      radius: 28,
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: TextField(
+        controller: _controller,
+        keyboardType: TextInputType.text,
+        textInputAction: TextInputAction.go,
+        textAlignVertical: TextAlignVertical.center,
+        decoration: InputDecoration(
+          hintText: context.l10n.webview_addressHint,
+          prefixIcon: const Icon(Symbols.language_rounded),
+          suffixIcon: IconButton(
+            icon: const Icon(Symbols.arrow_forward_rounded),
+            onPressed: () => _submit(),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 14,
+          ),
         ),
-        filled: true,
-        fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.5,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: context.shapes.borderRadius(28),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 14,
-        ),
+        onSubmitted: (_) => _submit(),
       ),
-      onSubmitted: (_) => _submit(),
     );
   }
 

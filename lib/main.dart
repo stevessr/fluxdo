@@ -6,13 +6,12 @@ import 'modules/mini_apps/mini_app_window_app.dart';
 import 'package:catcher_2/catcher_2.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageProvider;
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/legacy.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
 
 import 'pages/topics_page.dart';
@@ -33,7 +32,9 @@ import 'widgets/common/app_glass_settings.dart';
 import 'widgets/user/account_switcher_sheet.dart';
 
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter_displaymode/flutter_displaymode.dart';
+
+import 'services/display_refresh_service.dart';
+
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'services/network/cookie/csrf_token_service.dart';
@@ -48,8 +49,6 @@ import 'services/data_management/cache_size_service.dart';
 import 'services/discourse_cache_manager.dart';
 import 'services/render_backend_service.dart';
 import 'services/toast_service.dart';
-
-import 'package:m3e_ui/m3e_ui.dart';
 
 import 'l10n/s.dart';
 
@@ -75,7 +74,12 @@ import 'widgets/festival_greeting.dart';
 import 'services/update_checker_helper.dart';
 
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show FlattenCache, ParagraphLayoutCache, FluxdoRenderShapes;
+    show
+        AiContentBadge,
+        FlattenCache,
+        ParagraphLayoutCache,
+        FluxdoRenderShapes,
+        SpoilerShader;
 
 import 'services/clipboard_topic_link_service.dart';
 import 'pages/webview_page.dart';
@@ -103,6 +107,8 @@ import 'constants.dart';
 import 'providers/connectivity_provider.dart';
 import 'utils/dialog_utils.dart';
 import 'utils/frame_jank_monitor.dart';
+import 'utils/hashtag_handlers.dart';
+import 'utils/idle_task.dart';
 import 'utils/image_decode_gate.dart';
 import 'widgets/post/post_item/render_parse_cache.dart';
 import 'utils/scroll_busy_signal.dart';
@@ -166,34 +172,14 @@ Future<bool> _initRhttp() async {
 }
 
 /// 应用 Android 屏幕刷新率偏好。
-/// 偏好值 0 表示跟随系统（auto），非 0 则按目标刷新率从 supported 中选最匹配的 mode。
+/// 旧 0 自动归一化为 -1；-2 为智能策略，正数为固定刷新率。
 /// 失败不阻塞启动。
-Future<void> _applyAndroidDisplayMode(SharedPreferences prefs) async {
-  final targetRate = prefs.getInt('pref_display_mode_refresh_rate') ?? 0;
-  try {
-    if (targetRate == 0) {
-      await FlutterDisplayMode.setPreferredMode(DisplayMode.auto);
-      return;
-    }
-    final modes = await FlutterDisplayMode.supported;
-    final active = await FlutterDisplayMode.active;
-    // 优先选分辨率匹配 active 的相同刷新率 mode；否则退化为任意分辨率
-    final matches = modes
-        .where((m) => m.refreshRate.round() == targetRate)
-        .toList();
-    if (matches.isEmpty) {
-      await FlutterDisplayMode.setPreferredMode(DisplayMode.auto);
-      return;
-    }
-    final picked = matches.firstWhere(
-      (m) => m.width == active.width && m.height == active.height,
-      orElse: () => matches.first,
+Future<void> _applyAndroidDisplayMode(SharedPreferences prefs) =>
+    DisplayRefreshService.instance.apply(
+      DisplayRefreshService.normalize(
+        prefs.getInt('pref_display_mode_refresh_rate'),
+      ),
     );
-    await FlutterDisplayMode.setPreferredMode(picked);
-  } catch (e) {
-    debugPrint('[Main] 应用屏幕刷新率失败: $e');
-  }
-}
 
 // Android 新版嵌入层通过 FlutterEngineGroup 按根库函数名启动子引擎，
 // 不读取 Activity 的 libraryUri。入口必须实际声明在 main.dart 中。
@@ -411,6 +397,7 @@ Future<void> main() async {
 
   // 阶段 2：依赖 prefs 的步骤并行
   final crashlyticsEnabled = prefs.getBool('pref_crashlytics') ?? true;
+  var crashContextEnabled = false;
   final developerMode = prefs.getBool('developer_mode') ?? false;
   CfChallengeLogger.setEnabled(developerMode);
   // 开发者模式下 debug 级日志落盘（高频追踪信息）
@@ -419,12 +406,20 @@ Future<void> main() async {
     CoreFallbackService.instance.initialize(prefs),
     ProxySettingsService.instance.initialize(prefs),
     if (Platform.isAndroid)
-      MethodChannel(
-        'com.github.lingyan000.fluxdo/crashlytics',
-      ).invokeMethod('setCrashlyticsEnabled', {'enabled': crashlyticsEnabled}),
+      const MethodChannel('com.github.lingyan000.fluxdo/crashlytics')
+          .invokeMethod<void>('setCrashlyticsEnabled', {
+            'enabled': crashlyticsEnabled,
+          })
+          .then<void>((_) {
+            crashContextEnabled = crashlyticsEnabled;
+          })
+          .catchError((Object error) {
+            // 崩溃上报不可用时仍要绘制首屏。
+            debugPrint('[Main] Crashlytics 初始化失败: $error');
+          }),
   ]);
   // 跟随同一开关:关闭时导航上下文也不再上报
-  CrashContextReporter.setEnabled(Platform.isAndroid && crashlyticsEnabled);
+  CrashContextReporter.setEnabled(crashContextEnabled);
   // rhttp (Rust reqwest) 初始化：在 ProxySettingsService 之后、NetworkSettingsService 之前
   await RhttpSettingsService.instance.initialize(prefs);
   // WebView 适配器设置
@@ -536,6 +531,10 @@ Future<void> main() async {
     await BlobImageCache.sweep(prefs);
   }());
 
+  // 注入 hashtag 药丸的图标解析与点击导航(fluxdo_render 注入点)
+  installHashtagHandlers();
+  AiContentBadge.descriptionOf = (context) => context.l10n.editor_aiDescription;
+
   // 注入 AI 模型管理包的消息提示实现
   AiToastDelegate.configure((message, {type = AiToastType.info}) {
     switch (type) {
@@ -546,11 +545,6 @@ Future<void> main() async {
       case AiToastType.info:
         ToastService.showInfo(message);
     }
-  });
-
-  // 注入自定义加载指示器
-  AiToastDelegate.configureLoading(({color, size = 48}) {
-    return LoadingSpinner(color: color, size: size);
   });
 
   // 根据当前语言配置 AI 模型管理包的语言
@@ -621,6 +615,8 @@ Future<void> main() async {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         aiSharedPreferencesProvider.overrideWithValue(prefs),
+        aiDialogPresenterProvider.overrideWithValue(showAppDialog),
+        aiBottomSheetPresenterProvider.overrideWithValue(showAppBottomSheet),
         aiDioAdapterFactoryProvider.overrideWithValue(
           createExternalHttpAdapter,
         ),
@@ -771,11 +767,7 @@ class MainApp extends ConsumerWidget {
               ],
               title: windowTitle,
               locale: TranslationProvider.of(context).flutterLocale,
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
               supportedLocales: AppLocaleUtils.supportedLocales,
               themeMode: resolvedTheme.mode,
               // 仅注入 fontFamilyFallback，不替换 textTheme，避免覆盖 Android OEM
@@ -806,8 +798,8 @@ class MainApp extends ConsumerWidget {
               builder: (context, child) {
                 final brightness = Theme.of(context).brightness;
                 // 页面背景：用户背景图优先，其次是节日底纹、主题的纸张纹理
-                final WidgetBuilder? pageBackground = themeState
-                        .isTransparentActive
+                final WidgetBuilder? pageBackground =
+                    themeState.isTransparentActive
                     ? _userBackgroundBuilder(themeState.background)
                     : themeState.isFestivalPatternActive
                     ? _festivalBackgroundBuilder(
@@ -944,6 +936,7 @@ class MainApp extends ConsumerWidget {
                     if (notification is ScrollUpdateNotification ||
                         notification is ScrollStartNotification) {
                       ScrollBusySignal.touch();
+                      DisplayRefreshService.instance.interaction();
                     }
                     return false;
                   },
@@ -988,7 +981,19 @@ class MainApp extends ConsumerWidget {
                   }
                 }
 
-                return AppGlassSettings(child: result);
+                return AppThemeBridge(
+                  child: AppGlassSettings(
+                    // 玻璃的背景统一在这里每帧截取一次，包住导航与弹层
+                    child: Builder(
+                      builder: (context) => GlassCaptureHost(
+                        enabled: GlassSettingsScope.of(context).allowsBlur(
+                          highContrast: MediaQuery.highContrastOf(context),
+                        ),
+                        child: result,
+                      ),
+                    ),
+                  ),
+                );
               },
               home:
                   windowHome ??
@@ -1075,6 +1080,7 @@ class _MainPageState extends ConsumerState<MainPage>
 
       // 初始化 Deep Link 服务
       DeepLinkService.instance.initialize(context);
+      _precacheShaders();
       // Secondary native Android tasks carry a one-shot, per-Activity topic
       // request. MainPage is mounted only after onboarding/preheat is ready.
       unawaited(_consumePicoLaunchRequest());
@@ -1230,6 +1236,26 @@ class _MainPageState extends ConsumerState<MainPage>
     await UpdateCheckerHelper.checkUpdateOnStartup(context, updateService);
   }
 
+  /// 首个玻璃组件、首个剧透出现时要加载 shader：`FragmentProgram.fromAsset`
+  /// 实际在 UI 线程上同步读资产并交给渲染后端，首次可达数百毫秒，会卡在
+  /// 它所在页面的入场动画里（如编辑器工具岛、首页之外的第一个提示条）。
+  /// 首屏稳定后趁空闲逐个提前加载，两次加载分开礼让，不叠在同一刻；
+  /// 只加载、不提前离屏渲染，不在冷启动时抢光栅线程编译管线
+  void _precacheShaders() {
+    const patience = Duration(seconds: 10);
+    final glass = GlassSettingsScope.of(context).allowsOptics(
+      shaderSupported: GlassSurface.opticalEdgeAvailable,
+      highContrast: MediaQuery.highContrastOf(context),
+    );
+    scheduleIdleTask(() {
+      if (glass) GlassSurface.precacheProgram();
+      scheduleIdleTask(
+        () => unawaited(SpoilerShader.ensureLoaded()),
+        maxDeferral: patience,
+      );
+    }, maxDeferral: patience);
+  }
+
   Future<void> _runStartupUiTasks() async {
     // 启动弹窗先于剪贴板提示，避免 SnackBar 被弹窗遮挡后仍被记为已提示。
     await _autoCheckUpdate();
@@ -1309,7 +1335,7 @@ class _MainPageState extends ConsumerState<MainPage>
     final request = await PicoVrService.instance.consumeLaunchRequest();
     if (!mounted || request == null) return;
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute<void>(
+      InteractionPageRoute<void>(
         builder: (_) => TopicDetailPage(
           topicId: request.topicId,
           scrollToPostNumber: request.postNumber,
@@ -1838,11 +1864,14 @@ class _MainPageState extends ConsumerState<MainPage>
     final topicState = ref.watch(selectedTopicProvider);
     final topicParallelStacked = topicState.isStacked && !topicState.tabMode;
     final messageParallelStacked = ref.watch(selectedMessageProvider).isStacked;
-    final seekingParallelStacked = ref.watch(selectedSeekingProvider).isStacked;
+    final followingFeedParallelStacked = ref
+        .watch(selectedFollowingFeedProvider)
+        .isStacked;
     final hideNavigationRail =
         (activeEntryId == NavEntryIds.home && topicParallelStacked) ||
         (activeEntryId == NavEntryIds.messages && messageParallelStacked) ||
-        (activeEntryId == NavEntryIds.seeking && seekingParallelStacked);
+        (activeEntryId == NavEntryIds.followingFeed &&
+            followingFeedParallelStacked);
 
     final exitOnSingleBack = ref.watch(
       preferencesProvider.select((preferences) => preferences.exitOnSingleBack),

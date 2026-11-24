@@ -1,9 +1,11 @@
+import 'package:common_ui/common_ui.dart'
+    show InteractionPageRoute, UiShapesContext, UiEmphasis;
 import 'dart:async';
 
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -429,7 +431,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
         if (hostContext.mounted) {
           unawaited(
             Navigator.of(hostContext).push(
-              MaterialPageRoute(builder: (_) => const AccountManagePage()),
+              InteractionPageRoute(builder: (_) => const AccountManagePage()),
             ),
           );
         }
@@ -496,7 +498,7 @@ class _TouchAccountQuickSwitcherState extends State<_TouchAccountQuickSwitcher>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHigh.withValues(alpha: 0.97),
-                borderRadius: BorderRadius.circular(36),
+                borderRadius: context.shapes.borderRadius(36),
                 border: Border.all(
                   color: scheme.outlineVariant.withValues(alpha: 0.55),
                 ),
@@ -776,7 +778,7 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
     navigator.pop();
     unawaited(
       navigator.push(
-        MaterialPageRoute(builder: (_) => const AccountManagePage()),
+        InteractionPageRoute(builder: (_) => const AccountManagePage()),
       ),
     );
   }
@@ -837,7 +839,7 @@ class _AccountSwitcherBodyState extends State<_AccountSwitcherBody> {
                 Icon(
                   Symbols.manage_accounts_rounded,
                   size: 20,
-                  color: theme.colorScheme.primary,
+                  color: UiEmphasis.of(theme).accent,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -902,7 +904,7 @@ class _AccountTile extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: context.shapes.borderRadius(999),
                 ),
                 child: Text(
                   l10n.accountManage_currentChip,

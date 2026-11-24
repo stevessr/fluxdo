@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../constants.dart';
@@ -16,6 +16,7 @@ import 'discourse/discourse_service.dart';
 import 'network/cookie/boundary_sync_service.dart';
 import 'network/cookie/cookie_jar_service.dart';
 import 'network/cookie/webview_cookie_priming.dart';
+import 'network/webview/webview_adapter_settings_service.dart';
 import 'preloaded_data_service.dart';
 import 'webview_session_cookie_refresh_service.dart';
 
@@ -211,16 +212,19 @@ class BrowserTrustCoordinator {
       return active;
     }
 
-    late final Future<void> future;
+    final preload = Completer<void>();
+    _activePreload = preload.future;
     preloadStage.value = BrowserTrustPreloadStage.native;
-    future = _ensurePreloadedInternal(reason: reason).whenComplete(() {
-      if (identical(_activePreload, future)) {
+    preload.complete(
+      _ensurePreloadedInternal(reason: reason).whenComplete(() {
         _activePreload = null;
         preloadStage.value = null;
-      }
-    });
-    _activePreload = future;
-    return future;
+        if (_pendingClearanceRefreshReason != null) {
+          _startClearanceRefreshIfLoggedIn(reason: 'preload_settled');
+        }
+      }),
+    );
+    return preload.future;
   }
 
   Future<bool> ensureBrowserTrust({
@@ -391,7 +395,8 @@ class BrowserTrustCoordinator {
     // rejection falls through to the startup WebView below.
     // /challenge 放行只能证明浏览器侧可达。不要提前清除最近的原生
     // 拒绝记录；本轮先用真实 native preload 验证是否也已恢复。
-    if (!_clearanceRecentlyRejected || proactiveVerified) {
+    if (!WebViewAdapterSettingsService.instance.effectiveEnabled &&
+        (!_clearanceRecentlyRejected || proactiveVerified)) {
       _lastPreloadPath = BrowserTrustPreloadPath.native;
       _log('preload path=native_probe reason=$reason');
       try {
@@ -408,7 +413,7 @@ class BrowserTrustCoordinator {
       }
     } else {
       _log(
-        'skip native preload probe after recent CF rejection reason=$reason',
+        'skip native preload probe: compatibility mode or recent CF rejection reason=$reason',
         level: 'warning',
       );
     }

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:common_ui/common_ui.dart';
@@ -22,6 +22,8 @@ import '../../services/discourse_cache_manager.dart'
     show BlobImageCache, BlobImageProvider;
 import '../../services/data_management/cache_size_service.dart';
 import '../../services/emoji_handler.dart';
+import '../../services/display_refresh_service.dart';
+import '../../widgets/common/styled_emoji_image.dart';
 import '../../services/fonts/font_catalog.dart';
 import '../../services/fonts/font_download_service.dart';
 import '../../services/fonts/font_sources.dart';
@@ -346,11 +348,78 @@ List<SettingsGroup> buildAppearanceSearchGroups(BuildContext context) {
       ],
     ),
 
-    // ── 表情风格 ──────────────────────────────────────────────────
+    // ── Emoji 类型与风格 ───────────────────────────────────────────
     SettingsGroup(
-      title: l10n.appearance_emojiStyle,
+      title: 'Emoji',
       icon: Symbols.add_reaction_rounded,
       items: [
+        CustomModel(
+          id: 'emojiRenderStyle',
+          title: l10n.appearance_emojiType,
+          subtitle: l10n.appearance_emojiTypeDesc,
+          builder: (context, ref) {
+            final selected = ref.watch(
+              preferencesProvider.select((p) => p.emojiRenderStyle),
+            );
+            final locale = Localizations.localeOf(context);
+            final isZh = locale.languageCode == 'zh';
+            final traditional = isZh &&
+                const ['HK', 'MO', 'TW'].contains(locale.countryCode);
+            String localized(String zh, String tw, String en) =>
+                isZh ? (traditional ? tw : zh) : en;
+            String label(EmojiRenderStyle style) => switch (style) {
+              EmojiRenderStyle.normal => localized('常规', '一般', 'Normal'),
+              EmojiRenderStyle.animated => localized('动态', '動態', 'Animated'),
+              EmojiRenderStyle.threeD => '3D',
+            };
+            String description(EmojiRenderStyle style) => switch (style) {
+              EmojiRenderStyle.normal => localized(
+                  '使用所选表情风格', '使用所選表情風格', 'Use selected emoji artwork'),
+              EmojiRenderStyle.animated => localized(
+                  'Google Noto 动态表情，缺失资源回退常规',
+                  'Google Noto 動態表情，缺失資源回退一般',
+                  'Animated Google Noto emoji; normal fallback'),
+              EmojiRenderStyle.threeD => localized(
+                  'Google Noto 3D 静态表情，缺失资源回退常规',
+                  'Google Noto 3D 靜態表情，缺失資源回退一般',
+                  'Google Noto 3D artwork; normal fallback'),
+            };
+            return ListTile(
+              leading: Icon(
+                Icons.emoji_emotions_outlined,
+                color: context.emphasis.accent,
+              ),
+              title: Text(context.l10n.appearance_emojiType),
+              subtitle: Text(label(selected)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showInteractionBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (sheetContext) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final style in EmojiRenderStyle.values)
+                        ListTile(
+                          title: Text(label(style)),
+                          subtitle: Text(description(style)),
+                          trailing: selected == style
+                              ? Icon(Icons.check,
+                                  color: sheetContext.emphasis.selected)
+                              : null,
+                          onTap: () {
+                            ref.read(preferencesProvider.notifier)
+                                .setEmojiRenderStyle(style);
+                            Navigator.pop(sheetContext);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
         CustomModel(
           id: 'emojiStyle',
           title: l10n.appearance_emojiStyle,
@@ -375,9 +444,11 @@ List<SettingsGroup> buildAppearanceSearchGroups(BuildContext context) {
               final rate = ref
                   .watch(preferencesProvider)
                   .displayModeRefreshRate;
-              return rate == 0
-                  ? context.l10n.appearance_displayModeAuto
-                  : '${rate}Hz';
+              return switch (rate) {
+                DisplayRefreshService.auto => context.l10n.appearance_displayModeAuto,
+                DisplayRefreshService.smart => context.l10n.appearance_displayModeSmart,
+                _ => '${rate}Hz',
+              };
             },
             onTap: (context, ref) => _showDisplayModeSheet(context, ref),
           ),
@@ -561,7 +632,7 @@ class _EmojiStyleSection extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Text(
-            l10n.appearance_emojiStyleDesc,
+            '${l10n.appearance_emojiStyle}\n${l10n.appearance_emojiStyleDesc}',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -587,7 +658,7 @@ class _EmojiStyleSection extends ConsumerWidget {
                           padding: const EdgeInsets.only(left: 6),
                           child: Image(
                             image: BlobImageProvider(
-                              EmojiHandler.urlForSet(name, set),
+                              EmojiStyleAssets.staticUrlFor(name, set) ?? EmojiHandler.urlForSet(name, set),
                               bucket: BlobImageCache.emojiBucket,
                             ),
                             width: 22,
@@ -650,32 +721,11 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
     return _DisplayModeData(modes: modes, active: active);
   }
 
-  Future<void> _apply(
-    int rate,
-    List<DisplayMode> modes,
-    DisplayMode active,
-  ) async {
+  Future<void> _apply(int rate) async {
     await ref
         .read(preferencesProvider.notifier)
         .setDisplayModeRefreshRate(rate);
-    try {
-      if (rate == 0) {
-        await FlutterDisplayMode.setPreferredMode(DisplayMode.auto);
-      } else {
-        final matches = modes
-            .where((m) => m.refreshRate.round() == rate)
-            .toList();
-        if (matches.isNotEmpty) {
-          final picked = matches.firstWhere(
-            (m) => m.width == active.width && m.height == active.height,
-            orElse: () => matches.first,
-          );
-          await FlutterDisplayMode.setPreferredMode(picked);
-        }
-      }
-    } catch (e) {
-      debugPrint('[DisplayMode] 切换刷新率失败: $e');
-    }
+    await DisplayRefreshService.instance.apply(rate);
   }
 
   @override
@@ -711,7 +761,10 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
           // 去重 + 高到低排序
           final uniqueRates = <int>{};
           for (final m in data.modes) {
-            uniqueRates.add(m.refreshRate.round());
+            if (m.refreshRate.isFinite && m.refreshRate.round() > 0 &&
+                m.width == data.active.width && m.height == data.active.height) {
+              uniqueRates.add(m.refreshRate.round());
+            }
           }
           final sortedRates = uniqueRates.toList()
             ..sort((a, b) => b.compareTo(a));
@@ -737,14 +790,19 @@ class _DisplayModeSheetBodyState extends ConsumerState<_DisplayModeSheetBody> {
                     groupValue: currentRate,
                     onChanged: (value) async {
                       if (value == null) return;
-                      await _apply(value, data.modes, data.active);
+                      await _apply(value);
                     },
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         RadioListTile<int>(
-                          value: 0,
+                          value: DisplayRefreshService.auto,
                           title: Text(l10n.appearance_displayModeAuto),
+                        ),
+                        RadioListTile<int>(
+                          value: DisplayRefreshService.smart,
+                          title: Text(l10n.appearance_displayModeSmart),
+                          subtitle: Text(l10n.appearance_displayModeSmartDesc),
                         ),
                         for (final rate in sortedRates)
                           RadioListTile<int>(

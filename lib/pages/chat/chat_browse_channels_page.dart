@@ -1,6 +1,7 @@
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/chat/chat_models.dart';
@@ -63,7 +64,7 @@ class _ChatBrowseChannelsPageState extends ConsumerState<ChatBrowseChannelsPage>
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Material(
               color: theme.colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: context.shapes.borderRadius(12),
               clipBehavior: Clip.antiAlias,
               child: TabBar(
                 controller: _tabController,
@@ -71,7 +72,7 @@ class _ChatBrowseChannelsPageState extends ConsumerState<ChatBrowseChannelsPage>
                 indicatorSize: TabBarIndicatorSize.tab,
                 indicator: BoxDecoration(
                   color: theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: context.shapes.borderRadius(10),
                 ),
                 labelColor: theme.colorScheme.onSecondaryContainer,
                 unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
@@ -112,7 +113,15 @@ class _ChatBrowseChannelsPageState extends ConsumerState<ChatBrowseChannelsPage>
                 filled: true,
                 fillColor: theme.colorScheme.surfaceContainerHigh,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: context.shapes.borderRadius(12),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -204,11 +213,16 @@ class _BrowseChannelListView extends ConsumerWidget {
               // 优先用频道自身 current_user_membership.following
               final isJoined =
                   channel.following || followedIds.contains(channel.id);
-              return _BrowseChannelTile(
+              return SegmentedCardItem(
                 key: ValueKey('browse-channel-${channel.id}'),
-                channel: channel,
-                isJoined: isJoined,
-                browseParams: params,
+                index: index,
+                count: channels.length,
+                gap: 3,
+                child: _BrowseChannelTile(
+                  channel: channel,
+                  isJoined: isJoined,
+                  browseParams: params,
+                ),
               );
             },
           ),
@@ -400,7 +414,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           decoration: BoxDecoration(
             color: theme.colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: context.shapes.borderRadius(999),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -473,7 +487,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
         tileColor: _isJoined
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.08)
             : null,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: context.shapes.borderRadius(12)),
         leading: _buildLeading(context, dimmed: dimmed),
         title: Row(
           children: [
@@ -491,7 +505,7 @@ class _BrowseChannelTileState extends ConsumerState<_BrowseChannelTile> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: context.shapes.borderRadius(6),
                 ),
                 child: Text(
                   _statusLabel(),

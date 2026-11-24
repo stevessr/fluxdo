@@ -98,6 +98,7 @@ mixin _SearchMixin on _DiscourseServiceBase {
     int? categoryId,
     bool includeGroups = true,
     bool includeMessageableGroups = false,
+    bool throwOnError = false,
     int limit = 6,
   }) async {
     try {
@@ -137,6 +138,7 @@ mixin _SearchMixin on _DiscourseServiceBase {
         response.data as Map<String, dynamic>,
       );
     } catch (e) {
+      if (throwOnError) rethrow;
       debugPrint('[DiscourseService] searchUsers failed: $e');
       return const MentionSearchResult(users: [], groups: []);
     }

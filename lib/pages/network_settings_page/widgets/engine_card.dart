@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:common_ui/common_ui.dart';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -398,7 +398,9 @@ class _WebViewSwitch extends StatelessWidget {
       secondary: Icon(
         Symbols.language_rounded,
         fill: enabled ? 1 : 0,
-        color: enabled ? context.emphasis.selected : null,
+        color: enabled
+            ? context.emphasis.selected
+            : Theme.of(context).colorScheme.onSurfaceVariant,
       ),
       title: Text(l10n.webviewAdapter_title),
       subtitle: Text(

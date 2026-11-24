@@ -1,5 +1,5 @@
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -124,7 +124,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         // 避免在应用中先显示一个只有单项的冗余对话框。
         selected = browsers.single;
       } else {
-        selected = await showModalBottomSheet<LoginBrowser>(
+        selected = await showInteractionBottomSheet<LoginBrowser>(
           context: context,
           showDragHandle: true,
           isScrollControlled: true,

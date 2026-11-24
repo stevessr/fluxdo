@@ -6,15 +6,26 @@ on:
       - 'core/doh_proxy'
       - 'docs/network/cloudflare-pqc.md'
       - '.github/workflows/cloudflare-pqc.yml'
+      - '.github/workflows/_check-scope.yml'
   push:
     branches: ['feat/cloudflare-hybrid-pqc']
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/cloudflare-pqc.yml
+      patterns: >-
+        ["core/doh_proxy","docs/network/cloudflare-pqc.md",".github/workflows/cloudflare-pqc.yml",".github/workflows/_check-scope.yml"]
+
   negotiate-tls:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:

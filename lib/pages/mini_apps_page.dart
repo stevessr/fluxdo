@@ -1,7 +1,8 @@
+import 'package:common_ui/common_ui.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../constants.dart';
 import '../models/mini_app.dart';
@@ -349,7 +350,7 @@ class _MiniAppsPageState extends State<MiniAppsPage> {
                             ),
                             trailing: const Icon(Icons.chevron_right_rounded),
                             onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
+                              InteractionPageRoute<void>(
                                 builder: (_) => MiniAppRuntimePage(app: app),
                               ),
                             ),

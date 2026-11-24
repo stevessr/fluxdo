@@ -89,8 +89,8 @@ class SitePolicyDocument {
           heading: heading,
           anchor: anchor,
         ));
-        if (anchor != null && anchor!.isNotEmpty) {
-          anchors.putIfAbsent(anchor!, () => index);
+        if (anchor != null && anchor.isNotEmpty) {
+          anchors.putIfAbsent(anchor, () => index);
         }
       }
       buffer.clear();
@@ -101,10 +101,10 @@ class SitePolicyDocument {
         flush();
         heading = node.text.trim();
         anchor = node.attributes['id'];
-        if (anchor == null || anchor!.isEmpty) {
+        if (anchor == null || anchor.isEmpty) {
           anchor = node.querySelector('[id]')?.attributes['id'];
         }
-        if (anchor == null || anchor!.isEmpty) {
+        if (anchor == null || anchor.isEmpty) {
           anchor = node.querySelector('a[name]')?.attributes['name'];
         }
       }

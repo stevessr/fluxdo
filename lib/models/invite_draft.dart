@@ -33,9 +33,11 @@ class InviteDraft {
       if (domain.isNotEmpty &&
           (!RegExp(r'^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$').hasMatch(domain) ||
               domain.contains('..') ||
-              domain.split('.').any(
-                (label) => label.startsWith('-') || label.endsWith('-'),
-              ))) {
+              domain
+                  .split('.')
+                  .any(
+                    (label) => label.startsWith('-') || label.endsWith('-'),
+                  ))) {
         return InviteDraftValidation.invalidDomain;
       }
       final max = int.tryParse(maxRedemptionsInput.trim());
@@ -55,16 +57,14 @@ class InviteDraft {
 
   int get maxRedemptionsAllowed =>
       method == InviteDeliveryMethod.link && advanced
-          ? (int.tryParse(maxRedemptionsInput.trim()) ?? 1)
-          : 1;
+      ? (int.tryParse(maxRedemptionsInput.trim()) ?? 1)
+      : 1;
 
-  String? get description =>
-      advanced ? _nonEmpty(descriptionInput) : null;
+  String? get description => advanced ? _nonEmpty(descriptionInput) : null;
 
-  String? get customMessage =>
-      advanced && method == InviteDeliveryMethod.email
-          ? _nonEmpty(customMessageInput)
-          : null;
+  String? get customMessage => advanced && method == InviteDeliveryMethod.email
+      ? _nonEmpty(customMessageInput)
+      : null;
 
   static String? _nonEmpty(String input) {
     final trimmed = input.trim();

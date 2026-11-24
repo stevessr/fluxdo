@@ -1,5 +1,11 @@
+import 'package:common_ui/common_ui.dart'
+    show
+        UiShapesContext,
+        InteractionPageRoute,
+        showInteractionDialog,
+        showInteractionBottomSheet;
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../services/network/cookie/site_cookie_manager_service.dart';
 
@@ -10,7 +16,7 @@ class WebViewCookieManagerPage extends StatefulWidget {
 
   static Future<void> open(BuildContext context, String currentUrl) {
     return Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      InteractionPageRoute(
         builder: (_) => WebViewCookieManagerPage(currentUrl: currentUrl),
       ),
     );
@@ -349,7 +355,7 @@ class _WebViewCookieManagerPageState extends State<WebViewCookieManagerPage> {
     String? error;
 
     try {
-      final changed = await showModalBottomSheet<bool>(
+      final changed = await showInteractionBottomSheet<bool>(
         context: context,
         useSafeArea: true,
         isScrollControlled: true,
@@ -612,7 +618,7 @@ class _WebViewCookieManagerPageState extends State<WebViewCookieManagerPage> {
   }
 
   Future<void> _deleteOne(ManagedSiteCookie cookie) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showInteractionDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除 Cookie'),
@@ -643,7 +649,7 @@ class _WebViewCookieManagerPageState extends State<WebViewCookieManagerPage> {
         .toList(growable: false);
     if (targets.isEmpty) return;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showInteractionDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('批量删除 Cookie'),
@@ -670,7 +676,7 @@ class _WebViewCookieManagerPageState extends State<WebViewCookieManagerPage> {
 
   Future<void> _clearHosts(Set<String> hosts) async {
     if (hosts.isEmpty) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showInteractionDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清除站点 Cookie'),
@@ -744,7 +750,7 @@ class _CookieFlag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: context.shapes.borderRadius(6),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );

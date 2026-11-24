@@ -1,8 +1,9 @@
 import 'dart:collection';
 
 import 'package:app_icons/app_icons.dart';
-import 'package:common_ui/common_ui.dart' show InteractionPageRoute;
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart'
+    show InteractionPageRoute, UiShapesContext, showInteractionDialog;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../constants.dart';
@@ -186,7 +187,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
 
     final copy = _copy(context);
-    return await showDialog<bool>(
+    return await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(copy.confirmJoinTitle),
@@ -272,7 +273,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   Future<void> _showAddMembers() async {
     final group = _group;
     if (group == null || !group.canManageMembers || _adding) return;
-    final request = await showDialog<_AddMembersRequest>(
+    final request = await showInteractionDialog<_AddMembersRequest>(
       context: context,
       builder: (_) => _AddMembersDialog(groupLabel: group.label),
     );
@@ -317,7 +318,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
 
     final copy = _copy(context);
-    final reason = await showDialog<String>(
+    final reason = await showInteractionDialog<String>(
       context: context,
       builder: (dialogContext) {
         final controller = TextEditingController();
@@ -383,7 +384,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
     final copy = _copy(context);
     final confirmed =
-        await showDialog<bool>(
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(copy.removeMember),
@@ -441,7 +442,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
 
     final copy = _copy(context);
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showInteractionDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(member.owner ? copy.removeOwner : copy.makeOwner),
@@ -550,7 +552,7 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   Future<void> _showMembershipRequests() async {
     final group = _group;
     if (group == null || !group.canManageMembers) return;
-    await showDialog<void>(
+    await showInteractionDialog<void>(
       context: context,
       builder: (_) => _GroupMembershipRequestsDialog(
         groupLabel: group.label,
@@ -580,7 +582,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   Future<void> _openGroupWebPage(String path, String title) async {
     final group = _group;
     if (group == null) return;
-    final url = '${AppConstants.baseUrl}/g/'
+    final url =
+        '${AppConstants.baseUrl}/g/'
         '${Uri.encodeComponent(group.name)}/$path';
     await WebViewPage.open(context, url, title: title);
   }
@@ -685,10 +688,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                   _GroupNavLabel(label: copy.activityGroup),
                   _GroupNavChip(
                     label: copy.activityPosts,
-                    onPressed: () => _openGroupWebPage(
-                      'activity/posts',
-                      copy.activityPosts,
-                    ),
+                    onPressed: () =>
+                        _openGroupWebPage('activity/posts', copy.activityPosts),
                   ),
                   const SizedBox(width: 8),
                   _GroupNavChip(
@@ -743,18 +744,14 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                     const SizedBox(width: 8),
                     _GroupNavChip(
                       label: copy.manageTags,
-                      onPressed: () => _openGroupWebPage(
-                        'manage/tags',
-                        copy.manageTags,
-                      ),
+                      onPressed: () =>
+                          _openGroupWebPage('manage/tags', copy.manageTags),
                     ),
                     const SizedBox(width: 8),
                     _GroupNavChip(
                       label: copy.manageLogs,
-                      onPressed: () => _openGroupWebPage(
-                        'manage/logs',
-                        copy.manageLogs,
-                      ),
+                      onPressed: () =>
+                          _openGroupWebPage('manage/logs', copy.manageLogs),
                     ),
                     const SizedBox(width: 8),
                     _GroupNavChip(
@@ -979,9 +976,8 @@ class _GroupNavLabel extends StatelessWidget {
     padding: const EdgeInsets.only(right: 8),
     child: Text(
       label,
-      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
+      style: Theme.of(context).textTheme.labelMedium
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     ),
   );
 }
@@ -1170,7 +1166,7 @@ class _SmallBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: context.shapes.borderRadius(999),
       ),
       child: Text(
         label,

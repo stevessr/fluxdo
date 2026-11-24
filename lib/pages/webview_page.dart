@@ -5,7 +5,7 @@ import 'dart:collection' show UnmodifiableListView;
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -36,9 +36,6 @@ import '../services/network/cookie/webview_cookie_priming.dart';
 import '../services/webview_settings.dart';
 import '../services/windows_webview_environment_service.dart';
 import '../widgets/common/app_link_confirm_dialog.dart';
-import '../widgets/common/smart_avatar.dart';
-import '../widgets/user/account_switcher_sheet.dart';
-import '../providers/discourse_providers.dart';
 import '../providers/web_bookmark_provider.dart';
 import '../providers/web_history_provider.dart';
 import '../providers/download_provider.dart';
@@ -919,7 +916,10 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                                     ),
                                     opacity: _snapshotVisible ? 1 : 0,
                                     duration:
-                                        MediaQuery.disableAnimationsOf(context)
+                                        (MediaQuery.disableAnimationsOf(
+                                              context,
+                                            ) ||
+                                            MediaQuery.reduceMotionOf(context))
                                         ? Duration.zero
                                         : const Duration(milliseconds: 120),
                                     onEnd: () {
@@ -954,7 +954,9 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                         child: IgnorePointer(
                           ignoring: !_addressEditing && _currentUrl.isNotEmpty,
                           child: AnimatedSwitcher(
-                            duration: MediaQuery.disableAnimationsOf(context)
+                            duration:
+                                (MediaQuery.disableAnimationsOf(context) ||
+                                    MediaQuery.reduceMotionOf(context))
                                 ? Duration.zero
                                 : const Duration(milliseconds: 240),
                             transitionBuilder: (child, animation) =>
@@ -1110,6 +1112,7 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
       final frame = await WebViewSurfaceCapture.capture(
         takeScreenshot: (configuration) =>
             controller.takeScreenshot(screenshotConfiguration: configuration),
+        viewId: WebViewSurfaceCapture.keepAliveIdOf(controller),
         platform: defaultTargetPlatform,
         viewport: render.localToGlobal(Offset.zero) & size,
         region: region,

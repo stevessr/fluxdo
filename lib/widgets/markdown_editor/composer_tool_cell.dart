@@ -1,5 +1,5 @@
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
 /// 网格图标框；宽字形按自然宽度居中，不被方框压缩。
@@ -86,13 +86,12 @@ class ToolCellBody extends StatelessWidget {
                 child: Container(
                   width: 18,
                   height: 18,
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: pinned
                         ? theme.colorScheme.primary
                         : theme.colorScheme.surfaceContainerHighest,
-                    shape: BoxShape.circle,
-                    border: Border.fromBorderSide(
-                      BorderSide(color: theme.colorScheme.surface, width: 1.5),
+                    shape: context.shapes.circle(
+                      side: BorderSide(color: theme.colorScheme.surface, width: 1.5),
                     ),
                   ),
                   child: Icon(

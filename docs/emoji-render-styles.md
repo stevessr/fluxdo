@@ -33,3 +33,36 @@ not a live 3D model.
 These Google-hosted artworks are not included in the Fluxdo binary.
 The user-selected visuals are fetched on demand and cached by the existing
 image cache. Do not remove these credits when distributing a modified client.
+
+## Static artwork sets
+
+The appearance selector (Noto, Twemoji, Fluent UI, OpenMoji and Unicode)
+uses Discourse's generated PNG artwork, not the device's installed emoji
+font. It downloads on demand through the shared emoji cache. The public
+Discourse Emoji CDN is tried first, followed by the pinned
+[discourse-emojis distribution](https://github.com/discourse/discourse-emojis/tree/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji)
+and then the original site image. The distribution contains shortcode aliases
+and skin-tone variants. Artwork is licensed by the respective upstream
+projects; see the upstream distribution and its license notices. Both the
+static and animated/3D preferences affect post bodies only; custom emoji
+and other UI remain unchanged.
+
+## Font-first static rendering
+
+Noto COLRv1 (5,038,236 bytes), Twemoji COLRv1 (1,301,060 bytes), and OpenMoji
+COLRv0 (2,759,076 bytes) use the private dynamically registered font families
+in EmojiFontService. Only the chosen style is downloaded on first eligible
+post-body glyph. Downloads are shared, persisted across launches, checked by
+exact length and pinned Git blob hash, and use cookie-free external requests.
+While the chosen font loads, simple glyphs temporarily use the system font
+without issuing individual image requests. Unicode uses the system font for
+simple glyphs. Fluent remains image-based
+because the official Fluent artwork repository does not ship a color font.
+Complex sequences, absent glyphs, custom emoji, animated and 3D artwork use
+the original image pipeline. Font failures fall back to artwork, with a five
+minute retry cooldown. Actual color-font backend behavior needs device tests.
+
+Sources and license notices:
+- Noto Emoji: https://github.com/googlefonts/noto-emoji (OFL font license).
+- Twemoji: https://github.com/googlefonts/color-fonts (font build from Twemoji artwork; upstream license notices apply).
+- OpenMoji: https://github.com/hfg-gmuend/openmoji (upstream font and artwork license notices).

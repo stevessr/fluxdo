@@ -1,7 +1,7 @@
 import 'package:common_ui/common_ui.dart';
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: depend_on_referenced_packages
@@ -374,6 +374,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
         floatingActionButton: _selectionMode
             ? null
             : BottomNavClearance(
+                mediaQuery: MediaQuery.of(context),
                 child: FloatingActionButton(
                   heroTag: 'composePm',
                   onPressed: _composeNewMessage,

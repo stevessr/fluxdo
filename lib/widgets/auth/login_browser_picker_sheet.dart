@@ -1,6 +1,8 @@
+import 'package:common_ui/common_ui.dart' show UiShapesContext;
+
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 
 import '../../services/system_browser_service.dart';
@@ -22,7 +24,7 @@ class LoginBrowserPickerSheet extends StatelessWidget {
   /// Null hides the login-specific guidance when picking a browser for a link.
   final String? description;
 
-  Widget _browserIcon(LoginBrowser browser) {
+  Widget _browserIcon(BuildContext context, LoginBrowser browser) {
     final bytes = browser.iconBytes;
     if (bytes == null || bytes.isEmpty) {
       return const Icon(Icons.open_in_browser_rounded, size: 28);
@@ -44,7 +46,7 @@ class LoginBrowserPickerSheet extends StatelessWidget {
       }
     }
     return ClipRRect(
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: context.shapes.borderRadius(9),
       child: Image.memory(
         bytes,
         width: 40,
@@ -91,7 +93,7 @@ class LoginBrowserPickerSheet extends StatelessWidget {
                       leading: SizedBox(
                         width: 40,
                         height: 40,
-                        child: Center(child: _browserIcon(browser)),
+                        child: Center(child: _browserIcon(context, browser)),
                       ),
                       title: Text(
                         browser.name,

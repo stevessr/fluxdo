@@ -1,7 +1,6 @@
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
-import 'package:jovial_svg/jovial_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -31,6 +30,7 @@ class _AboutPageState extends State<AboutPage> {
   final UpdateService _updateService = UpdateService();
   String _version = '0.1.0';
   String _githubProxy = '';
+  bool? _checkBetaUpdates;
   int _versionTapCount = 0;
   DateTime? _lastVersionTapTime;
   bool _developerMode = false;
@@ -41,6 +41,7 @@ class _AboutPageState extends State<AboutPage> {
     _loadVersion();
     _loadDeveloperMode();
     _loadGithubProxy();
+    _loadCheckBetaUpdates();
   }
 
   void _onVersionTap() {
@@ -106,6 +107,20 @@ class _AboutPageState extends State<AboutPage> {
     final proxy = await UpdateService.getGithubProxy();
     if (mounted) {
       setState(() => _githubProxy = proxy);
+    }
+  }
+
+  Future<void> _loadCheckBetaUpdates() async {
+    final enabled = await _updateService.getCheckBetaUpdates();
+    if (mounted) {
+      setState(() => _checkBetaUpdates = enabled);
+    }
+  }
+
+  Future<void> _setCheckBetaUpdates(bool enabled) async {
+    await _updateService.setCheckBetaUpdates(enabled);
+    if (mounted) {
+      setState(() => _checkBetaUpdates = enabled);
     }
   }
 
@@ -227,17 +242,11 @@ class _AboutPageState extends State<AboutPage> {
         children: [
           const SizedBox(height: 40),
           // Logo Header
-          Center(
+          const Center(
             child: SizedBox(
               width: 100,
               height: 100,
-              child: ScalableImageWidget.fromSISource(
-                si: ScalableImageSource.fromSvg(
-                  DefaultAssetBundle.of(context),
-                  'assets/logo.svg',
-                  warnF: (_) {},
-                ),
-              ),
+              child: AppSvgAsset('assets/logo.svg'),
             ),
           ),
           const SizedBox(height: 24),
@@ -277,6 +286,14 @@ class _AboutPageState extends State<AboutPage> {
                   icon: Symbols.update_rounded,
                   title: context.l10n.about_checkUpdate,
                   onTap: _checkForUpdate,
+                ),
+                M3eSwitchListTile(
+                  secondary: const Icon(Icons.science_outlined),
+                  title: Text(context.l10n.about_checkBetaUpdates),
+                  value: _checkBetaUpdates ?? false,
+                  onChanged: _checkBetaUpdates == null
+                      ? null
+                      : _setCheckBetaUpdates,
                 ),
                 _buildListTile(
                   context,

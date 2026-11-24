@@ -1,5 +1,6 @@
+import 'package:common_ui/common_ui.dart' show UiEmphasis;
 import 'package:app_icons/app_icons.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/s.dart';
 import '../../../services/network/vpn_bypass_service.dart';
@@ -31,7 +32,7 @@ class VpnBypassCard extends StatelessWidget {
               secondary: Icon(
                 Symbols.route_rounded,
                 fill: status.bound ? 1 : 0,
-                color: status.bound ? theme.colorScheme.primary : null,
+                color: status.bound ? UiEmphasis.of(theme).selected : null,
               ),
               value: enabled,
               onChanged: service.setEnabled,

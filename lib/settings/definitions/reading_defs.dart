@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,72 +34,6 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
               ref.read(preferencesProvider.notifier).setContentFontScale(v),
           onReset: (ref) =>
               ref.read(preferencesProvider.notifier).setContentFontScale(1.0),
-        ),
-        CustomModel(
-          id: 'emojiRenderStyle',
-          title: 'Emoji style',
-          builder: (context, ref) {
-            final selected = ref.watch(
-              preferencesProvider.select((p) => p.emojiRenderStyle),
-            );
-            final locale = Localizations.localeOf(context);
-            final isZh = locale.languageCode == 'zh';
-            final traditional = isZh &&
-                const ['HK', 'MO', 'TW'].contains(locale.countryCode);
-            String localized(String zh, String tw, String en) =>
-                isZh ? (traditional ? tw : zh) : en;
-            String label(EmojiRenderStyle style) => switch (style) {
-              EmojiRenderStyle.normal => localized('常规', '一般', 'Normal'),
-              EmojiRenderStyle.animated => localized('动态', '動態', 'Animated'),
-              EmojiRenderStyle.threeD => '3D',
-            };
-            String description(EmojiRenderStyle style) => switch (style) {
-              EmojiRenderStyle.normal => localized(
-                  '使用站点原有表情', '使用網站原有表情', 'Original site emoji'),
-              EmojiRenderStyle.animated => localized(
-                  'Google Noto 动态表情，缺失资源回退常规',
-                  'Google Noto 動態表情，缺失資源回退一般',
-                  'Animated Google Noto emoji; normal fallback'),
-              EmojiRenderStyle.threeD => localized(
-                  'Google Noto 3D 静态表情，缺失资源回退常规',
-                  'Google Noto 3D 靜態表情，缺失資源回退一般',
-                  'Google Noto 3D artwork; normal fallback'),
-            };
-            return ListTile(
-              leading: Icon(
-                Icons.emoji_emotions_outlined,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              title: Text(localized('Emoji 风格', 'Emoji 風格', 'Emoji style')),
-              subtitle: Text(label(selected)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => showModalBottomSheet<void>(
-                context: context,
-                showDragHandle: true,
-                builder: (sheetContext) => SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final style in EmojiRenderStyle.values)
-                        ListTile(
-                          title: Text(label(style)),
-                          subtitle: Text(description(style)),
-                          trailing: selected == style
-                              ? Icon(Icons.check,
-                                  color: Theme.of(sheetContext).colorScheme.primary)
-                              : null,
-                          onTap: () {
-                            ref.read(preferencesProvider.notifier)
-                                .setEmojiRenderStyle(style);
-                            Navigator.pop(sheetContext);
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
         ),
         SwitchModel(
           id: 'displayPanguSpacing',
@@ -221,6 +155,26 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             );
           },
         ),
+        CustomModel(
+          id: 'replyComposerMode',
+          title: l10n.reading_replyComposerMode,
+          builder: (context, ref) {
+            final current = ref.watch(
+              preferencesProvider.select((p) => p.replyComposerMode),
+            );
+            final l = context.l10n;
+            return ListTile(
+              leading: Icon(
+                Symbols.edit_note_rounded,
+                color: context.emphasis.accent,
+              ),
+              title: Text(l.reading_replyComposerMode),
+              subtitle: Text(_replyComposerModeLabel(l, current)),
+              trailing: const Icon(Symbols.chevron_right_rounded),
+              onTap: () => _showReplyComposerModePicker(context, ref, current),
+            );
+          },
+        ),
         PlatformConditionalModel(
           inner: SwitchModel(
             id: 'aiSwipeEntry',
@@ -240,6 +194,15 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
       icon: Symbols.gesture_rounded,
       items: [
         SwitchModel(
+          id: 'topicBarAutoHide',
+          title: l10n.reading_topicBarAutoHide,
+          subtitle: l10n.reading_topicBarAutoHideDesc,
+          icon: Symbols.unfold_less_rounded,
+          getValue: (ref) => ref.watch(preferencesProvider).topicBarAutoHide,
+          onChanged: (ref, v) =>
+              ref.read(preferencesProvider.notifier).setTopicBarAutoHide(v),
+        ),
+        SwitchModel(
           id: 'progressGesturesEnabled',
           title: l10n.progressGesture_enable,
           subtitle: l10n.progressGesture_enableDesc,
@@ -251,72 +214,18 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
               .setProgressGesturesEnabled(v),
         ),
         CustomModel(
-          id: 'progressGestureSwipeLeft',
-          title: l10n.progressGesture_swipeLeft,
+          id: 'progressGestureDragToLocate',
+          title: l10n.progressGesture_dragToLocate,
+          subtitle: l10n.progressGesture_dragToLocateDesc,
           builder: (context, ref) {
             final enabled = ref.watch(
               preferencesProvider.select((p) => p.progressGesturesEnabled),
             );
-            final current = ref.watch(
-              preferencesProvider.select((p) => p.progressGestureSwipeLeft),
-            );
-            final meta = progressGestureActionMeta(context, current);
             return ListTile(
               enabled: enabled,
-              leading: Icon(
-                Symbols.swipe_left_rounded,
-                color: enabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
-              title: Text(context.l10n.progressGesture_swipeLeft),
-              subtitle: Text(meta.label),
-              trailing: const Icon(Symbols.chevron_right_rounded),
-              onTap: enabled
-                  ? () => _showGestureActionPicker(
-                      context,
-                      ref,
-                      current,
-                      (a) => ref
-                          .read(preferencesProvider.notifier)
-                          .setProgressGestureSwipeLeft(a),
-                    )
-                  : null,
-            );
-          },
-        ),
-        CustomModel(
-          id: 'progressGestureSwipeRight',
-          title: l10n.progressGesture_swipeRight,
-          builder: (context, ref) {
-            final enabled = ref.watch(
-              preferencesProvider.select((p) => p.progressGesturesEnabled),
-            );
-            final current = ref.watch(
-              preferencesProvider.select((p) => p.progressGestureSwipeRight),
-            );
-            final meta = progressGestureActionMeta(context, current);
-            return ListTile(
-              enabled: enabled,
-              leading: Icon(
-                Symbols.swipe_right_rounded,
-                color: enabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
-              title: Text(context.l10n.progressGesture_swipeRight),
-              subtitle: Text(meta.label),
-              trailing: const Icon(Symbols.chevron_right_rounded),
-              onTap: enabled
-                  ? () => _showGestureActionPicker(
-                      context,
-                      ref,
-                      current,
-                      (a) => ref
-                          .read(preferencesProvider.notifier)
-                          .setProgressGestureSwipeRight(a),
-                    )
-                  : null,
+              leading: const Icon(Symbols.swap_horiz_rounded),
+              title: Text(context.l10n.progressGesture_dragToLocate),
+              subtitle: Text(context.l10n.progressGesture_dragToLocateDesc),
             );
           },
         ),
@@ -333,12 +242,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             final meta = progressGestureActionMeta(context, current);
             return ListTile(
               enabled: enabled,
-              leading: Icon(
-                Symbols.swipe_up_rounded,
-                color: enabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
+              leading: const Icon(Symbols.swipe_up_rounded),
               title: Text(context.l10n.progressGesture_swipeUp),
               subtitle: Text(meta.label),
               trailing: const Icon(Symbols.chevron_right_rounded),
@@ -368,12 +272,7 @@ List<SettingsGroup> buildReadingGroups(BuildContext context) {
             );
             return ListTile(
               enabled: enabled,
-              leading: Icon(
-                Symbols.fingerprint_rounded,
-                color: enabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).disabledColor,
-              ),
+              leading: const Icon(Symbols.fingerprint_rounded),
               title: Text(context.l10n.progressGesture_longPressMenu),
               subtitle: Text(
                 '${items.length}/$kProgressGestureMenuMax · '
@@ -522,6 +421,53 @@ void _showBookmarksOpenModePicker(
   ).then((selected) {
     if (selected != null) {
       ref.read(preferencesProvider.notifier).setBookmarksOpenMode(selected);
+    }
+  });
+}
+
+String _replyComposerModeLabel(AppLocalizations l, ReplyComposerMode mode) {
+  return switch (mode) {
+    ReplyComposerMode.auto => l.reading_replyComposerModeAuto,
+    ReplyComposerMode.quick => l.reading_replyComposerModeQuick,
+    ReplyComposerMode.full => l.reading_replyComposerModeFull,
+  };
+}
+
+void _showReplyComposerModePicker(
+  BuildContext context,
+  WidgetRef ref,
+  ReplyComposerMode current,
+) {
+  final l10n = context.l10n;
+  showInteractionDialog<ReplyComposerMode>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: Text(l10n.reading_replyComposerMode),
+      children: [
+        for (final mode in ReplyComposerMode.values)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, mode),
+            child: Row(
+              children: [
+                Icon(
+                  mode == current
+                      ? Symbols.radio_button_checked_rounded
+                      : Symbols.radio_button_unchecked_rounded,
+                  color: mode == current
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(_replyComposerModeLabel(l10n, mode))),
+              ],
+            ),
+          ),
+      ],
+    ),
+  ).then((selected) {
+    if (selected != null) {
+      ref.read(preferencesProvider.notifier).setReplyComposerMode(selected);
     }
   });
 }

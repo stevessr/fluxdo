@@ -8,15 +8,21 @@ on:
       - main
     paths:
       - 'packages/stevessr_generator/**'
+      - 'packages/common_ui/**'
+      - 'packages/app_icons/**'
+      - '.fvmrc'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
       - '.github/workflows/stevessr.yaml'
+      - '.github/actions/build-stevessr/**'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: stevessr-generator-nightly
-  cancel-in-progress: true
+  group: stevessr-generator-nightly-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   detect-changes:
@@ -41,10 +47,15 @@ jobs:
             exit 0
           fi
 
-          # 主 nightly 缺少插件附件时补建，避免源码未变更导致一直跳过。
-          if ! gh release view nightly --repo "$GITHUB_REPOSITORY" --json assets \
-            --jq '.assets[].name' | grep -Fxq 'stevessr-generator-android-arm64-v8a.apk'; then
-            echo "Generator APK missing from nightly; rebuilding."
+          # A missing or different APK in either release must be repaired.
+          asset_digest() {
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$1" \
+              --jq '.assets[] | select(.name == "stevessr-generator-android-arm64-v8a.apk" and .state == "uploaded") | .digest // empty'
+          }
+          standalone_digest="$(asset_digest stevessr-nightly || true)"
+          shared_digest="$(asset_digest nightly || true)"
+          if [[ ! "$standalone_digest" =~ ^sha256:[0-9a-f]{64}$ || "$standalone_digest" != "$shared_digest" ]]; then
+            echo "Generator APK missing, unverifiable or inconsistent between releases; rebuilding."
             echo "build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -53,7 +64,7 @@ jobs:
           if ! previous_commit="$(git rev-parse --verify "refs/tags/${previous_tag}^{commit}" 2>/dev/null)"; then
             echo "No previous nightly tag; building initial APK."
             echo "build=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$previous_commit" HEAD -- packages/stevessr_generator/ .github/workflows/stevessr.yaml; then
+          elif git diff --quiet "$previous_commit" HEAD -- packages/stevessr_generator/ packages/common_ui/ packages/app_icons/ .fvmrc pubspec.yaml pubspec.lock .github/workflows/stevessr.yaml .github/actions/build-stevessr/; then
             echo "No package changes since ${previous_tag}; skipping build and upload."
             echo "build=false" >> "$GITHUB_OUTPUT"
           else
@@ -70,81 +81,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.9'
-          channel: stable
-          cache: true
-
-      - name: Verify generator package and source manifest
-        working-directory: packages/stevessr_generator
-        run: |
-          flutter pub get
-          dart run tool/gen_avatar_deltas.dart --check
-          dart analyze lib tool
-
-      - name: Get example dependencies
-        working-directory: packages/stevessr_generator/example
-        run: flutter pub get
-
-      - name: Run all test files
-        working-directory: packages/stevessr_generator/example
-        run: |
-          for test_file in test/*_test.dart; do
-            flutter test --no-pub "$test_file"
-          done
-
-      - name: Build arm64 release APK
-        working-directory: packages/stevessr_generator/example
-        run: flutter build apk --release --target-platform android-arm64 --build-number "$GITHUB_RUN_NUMBER"
-
-      - name: Verify plugin APK has no launcher entry
-        working-directory: packages/stevessr_generator/example
-        shell: bash
-        run: |
-          set -euo pipefail
-          aapt="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
-          test -n "$aapt"
-          "$aapt" dump xmltree build/app/outputs/flutter-apk/app-release.apk AndroidManifest.xml > /tmp/stevessr-manifest.txt
-          grep -Fq 'com.github.lingyan000.fluxdo.action.PLUGIN' /tmp/stevessr-manifest.txt
-          grep -Fq 'com.github.lingyan000.fluxdo.plugin.API_VERSION' /tmp/stevessr-manifest.txt
-          if grep -Fq 'android.intent.category.LAUNCHER' /tmp/stevessr-manifest.txt; then
-            echo '插件 APK 不应带桌面启动器图标'
-            exit 1
-          fi
-
-      - name: Verify APK contains arm64 libraries only
-        working-directory: packages/stevessr_generator/example
-        shell: bash
-        run: |
-          set -euo pipefail
-          unzip -Z1 build/app/outputs/flutter-apk/app-release.apk | awk -F/ '
-            $1 == "lib" && $2 != "" {
-              if ($2 == "arm64-v8a") {
-                found_arm64 = 1
-              } else {
-                print "Unexpected native ABI entry: " $0
-                failed = 1
-              }
-            }
-            END {
-              if (!found_arm64) {
-                print "APK contains no arm64-v8a native libraries"
-                failed = 1
-              }
-              exit failed
-            }
-          '
-
-      - name: Stage stable APK filename
-        run: cp packages/stevessr_generator/example/build/app/outputs/flutter-apk/app-release.apk stevessr-generator-android-arm64-v8a.apk
+      - name: Build and validate release APK
+        uses: ./.github/actions/build-stevessr
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -154,42 +92,42 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Create or update nightly prerelease
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: stevessr-nightly
-          name: StevesSR Generator Nightly
-          prerelease: true
-          make_latest: false
-          overwrite_files: true
-          fail_on_unmatched_files: true
-          files: stevessr-generator-android-arm64-v8a.apk
-          body: |
-            Automated nightly build of the FluxDO external StevesSR Generator plugin APK.
-
-            Source commit: ${{ github.sha }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Move nightly tag to this commit
-        run: |
-          git tag -f stevessr-nightly "$GITHUB_SHA"
-          git push --force origin refs/tags/stevessr-nightly
-
   publish-nightly:
     name: Publish generator APK to nightly
     needs: build-and-release
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     # 与主程序发布共用并发组，只在上传附件期间串行。
     concurrency:
       group: fluxdo-nightly-release
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v4
       - name: Download generator APK
         uses: actions/download-artifact@v4
         with:
           name: stevessr-generator-android-arm64-v8a
           path: nightly
+
+      - name: Create or update nightly prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: stevessr-nightly
+          target_commitish: ${{ github.sha }}
+          name: StevesSR Generator Nightly
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: nightly/stevessr-generator-android-arm64-v8a.apk
+          body: |
+            Automated nightly build of the FluxDO external StevesSR Generator plugin APK.
+
+            Source commit: ${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload generator APK to shared nightly
         env:
@@ -205,3 +143,22 @@ jobs:
           fi
           gh release upload nightly nightly/stevessr-generator-android-arm64-v8a.apk \
             --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Verify both published APKs and advance nightly tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=nightly/stevessr-generator-android-arm64-v8a.apk
+          expected="sha256:$(sha256sum "$apk" | cut -d ' ' -f 1)"
+          for tag in stevessr-nightly nightly; do
+            actual="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" \
+              --jq '.assets[] | select(.name == "stevessr-generator-android-arm64-v8a.apk" and .state == "uploaded") | .digest // empty')"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "APK digest mismatch for $tag"
+              exit 1
+            fi
+          done
+          git tag -f stevessr-nightly "$GITHUB_SHA"
+          git push --force origin refs/tags/stevessr-nightly

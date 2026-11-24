@@ -6,7 +6,7 @@ import 'package:fluxdo_render/editor.dart'
         observeModifierKeyEvent,
         primaryModifierHeldForReversibleAction,
         shiftModifierHeld;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 
@@ -34,6 +34,8 @@ import 'composer_tools_anchor.dart';
 import 'composer_view_mode_switcher.dart';
 import 'cursor_swipe_control.dart';
 import 'composer_shortcuts.dart';
+import 'composer_special_content.dart';
+import 'ai_content_block.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
 import 'media_upload_helper.dart';
@@ -322,6 +324,38 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// StevesSR generator's explicit Insert action bypasses the extra picker
+  /// confirmation and queues the exact PNG bytes at the captured caret.
+  Future<void> insertGeneratedImageFromBytes({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final anchor = _uploadAnchors.capture();
+    var registered = false;
+    _uploadingCount++;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final file = File(p.join(
+        tempDir.path,
+        '${DateTime.now().microsecondsSinceEpoch}_$fileName',
+      ));
+      await file.writeAsBytes(bytes);
+      if (!mounted) return;
+      _enqueueUpload(
+        path: file.path,
+        name: fileName,
+        anchor: anchor,
+        image: true,
+      );
+      registered = true;
+    } catch (error, stackTrace) {
+      AppErrorHandler.handleUnexpected(error, stackTrace);
+    } finally {
+      _uploadingCount--;
+      if (!registered) _uploadAnchors.release(anchor);
+    }
+  }
+
   /// 插入文本到光标位置
   void insertText(String text) {
     final selection = widget.controller.selection;
@@ -348,6 +382,21 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
+  /// 一个扩展内容入口，按选区替换或插入对应的 Discourse 模板。
+  Future<void> insertSpecialContent({BuildContext? menuContext}) async {
+    final originalSelection = widget.controller.selection;
+    final kind = await showComposerSpecialContentMenu(menuContext ?? context);
+    if (!mounted || kind == null) return;
+
+    final currentText = widget.controller.text;
+    widget.controller.value = applyComposerSpecialContent(
+      text: currentText,
+      selection: originalSelection,
+      kind: kind,
+    );
+    widget.focusNode?.requestFocus();
+  }
+
   /// 插入已上传的表情包图片，不再弹出确认框。
   void insertUploadedImage(UploadResult uploadResult, {String alt = '表情包'}) {
     _seedUploadCache(uploadResult);
@@ -360,6 +409,22 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     final prefix = needsLeadingNewline ? '\n' : '';
     insertText('$prefix${uploadResult.toMarkdown(alt: alt)}\n');
     widget.focusNode?.requestFocus();
+  }
+
+  /// 插入 AI 生成内容块标记,并带上选中文本作为初始内容。
+  void insertAiContent(AiContentBlock block) {
+    final value = widget.controller.value;
+    final range = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final before = range.textBefore(value.text);
+    final after = range.textAfter(value.text);
+    // 前后各留一个空行，避免相邻正文被 Markdown 的引用续行规则纳入标识。
+    final prefix = before.isEmpty || before.endsWith('\n\n')
+        ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+    final suffix = after.startsWith('\n\n')
+        ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+    insertText('$prefix${block.markdown(context.l10n, range.textInside(value.text))}$suffix');
   }
 
   /// 用指定前后缀包裹选中文本（无选中时插入占位符并选中）
@@ -1096,9 +1161,9 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     var registered = false;
     _uploadingCount++;
     try {
-      final result = await FilePicker.platform.pickFiles();
-      if (!mounted || result == null || result.files.isEmpty) return;
-      final file = result.files.first;
+      final result = await FilePicker.pickFile();
+      if (!mounted || result == null) return;
+      final file = result;
       if (file.path == null) return;
       _enqueueUpload(
         path: file.path!,
@@ -1150,11 +1215,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     var registered = false;
     _uploadingCount++;
     try {
-      final picked = await FilePicker.platform.pickFiles(
+      final file = await FilePicker.pickFile(
         type: isAudio ? FileType.audio : FileType.video,
       );
-      if (!mounted || picked == null || picked.files.isEmpty) return;
-      final file = picked.files.first;
+      if (!mounted || file == null) return;
       if (file.path == null) return;
       registered = await _prepareMediaTask(
         path: file.path!,
@@ -1227,6 +1291,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   List<Widget> _buildToolButtons({bool anchored = true}) {
     final ids = widget.visibleToolIds;
     final tools = ids == null ? editorTools : resolveVisibleTools(ids);
+    // 扩展内容入口始终占一个位置，旧用户的自定义配置也能直接使用。
+    if (!tools.any((tool) => tool.id == 'specialContent')) {
+      tools.add(editorTools.firstWhere((tool) => tool.id == 'specialContent'));
+    }
 
     return [
       for (final tool in tools) _buildToolButton(tool, anchored: anchored),
@@ -1239,6 +1307,28 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     // 桌面端 tooltip 标注快捷键(如「粗体 (⌘B)」;移动端无物理键盘不标)
     final hint = PlatformUtils.isDesktop ? composerShortcutHint(tool.id) : null;
     final tooltip = '${tool.label(s)}${hint ?? ''}';
+
+    if (tool.id == 'specialContent') {
+      return Builder(
+        builder: (buttonContext) => IconButton(
+          icon: IconTheme.merge(
+            data: const IconThemeData(size: 16),
+            child: icon,
+          ),
+          tooltip: tooltip,
+          style: composerToolButtonStyle(context),
+          onPressed: () {
+            if (anchored) {
+              insertSpecialContent(menuContext: buttonContext);
+            } else {
+              _desktopAction(
+                () => insertSpecialContent(menuContext: buttonContext),
+              );
+            }
+          },
+        ),
+      );
+    }
 
     if (tool.hasMenu) {
       final theme = Theme.of(context);

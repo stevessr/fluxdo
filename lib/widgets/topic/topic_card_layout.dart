@@ -2,12 +2,13 @@ import 'dart:ui' as ui;
 
 import 'package:common_ui/common_ui.dart';
 import 'package:app_icons/app_icons.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../models/category.dart';
 import '../../models/search_result.dart';
 import '../../models/topic.dart';
 import '../../models/topic_card_style.dart';
+import '../../services/emoji_handler.dart';
 import '../../utils/color_utils.dart';
 import '../../utils/number_utils.dart';
 import '../../utils/time_utils.dart';
@@ -41,7 +42,12 @@ import '../../theme/app_colors.dart';
 /// 相对时间是排版期快照,不随分钟自刷(widget 版每卡挂 Timer 自刷,
 /// 正是要消灭的常驻成本;列表刷新/数据换代即更新)。
 class TopicCardLayout {
-  TopicCardLayout._(this.key);
+  TopicCardLayout._(this.key, IconThemeData iconTheme)
+    : _iconVariations = appIconFontVariations(
+        appIconThemeDefaults.merge(iconTheme),
+      );
+
+  final List<ui.FontVariation> _iconVariations;
 
   final String key;
 
@@ -56,6 +62,9 @@ class TopicCardLayout {
 
   /// 标题内嵌 emoji:占位矩形(相对标题段落原点)+ 图片 URL
   final List<(Rect, String)> titleEmojis = [];
+
+  /// 摘要/blurb 内嵌 emoji:占位矩形(相对摘要段落原点)+ 图片 URL
+  final List<(Rect, String)> excerptEmojis = [];
 
   /// 段落内嵌图标(placeholder 行中线对齐,与 WidgetSpan(Icon) 同构;
   /// 直排字形会坐在基线上偏高):占位矩形 + 单字形小段落
@@ -193,7 +202,7 @@ class TopicCardLayout {
     );
     final cached = _cache[identity];
     if (cached != null && cached._stamp == stamp) return cached;
-    final layout = TopicCardLayout._(identity).._stamp = stamp;
+    final layout = TopicCardLayout._(identity, theme.iconTheme).._stamp = stamp;
     _put(identity, layout);
 
     final scheme = theme.colorScheme;
@@ -230,7 +239,7 @@ class TopicCardLayout {
       messageStyle: messageStyle,
       titleSegments: titleSegments,
       titleIconSpecs: titleIconSpecs,
-      parseTitleEmoji: true,
+      parseEmoji: true,
       emojiUrlOf: emojiUrlOf,
       isUnread: isUnread,
       isFullyRead: isFullyRead,
@@ -275,6 +284,7 @@ class TopicCardLayout {
     required double width,
     required ThemeData theme,
     required Category? category,
+    required String Function(String name) emojiUrlOf,
     double statsAvailableWidth = 460,
   }) {
     final stamp = (
@@ -286,7 +296,7 @@ class TopicCardLayout {
     );
     final cached = _cache[identity];
     if (cached != null && cached._stamp == stamp) return cached;
-    final layout = TopicCardLayout._(identity).._stamp = stamp;
+    final layout = TopicCardLayout._(identity, theme.iconTheme).._stamp = stamp;
     _put(identity, layout);
 
     final scheme = theme.colorScheme;
@@ -311,8 +321,8 @@ class TopicCardLayout {
         if (topic?.archived == true)
           (Symbols.archive_rounded, scheme.onSurfaceVariant),
       ],
-      parseTitleEmoji: false, // widget 版搜索卡不解析标题 emoji,对齐
-      emojiUrlOf: (_) => '',
+      parseEmoji: true,
+      emojiUrlOf: emojiUrlOf,
       isUnread: false,
       isFullyRead: false,
       unreadCount: 0,
@@ -393,16 +403,13 @@ class TopicCardLayout {
   }
 
   /// 单字形图标小段落(排版期构建一次,绘制期直接画)
-  static ui.Paragraph _iconParagraph(IconData icon, double size, Color color) {
+  ui.Paragraph _iconParagraph(IconData icon, double size, Color color) {
     final b = ui.ParagraphBuilder(_pStyle(fontSize: size, maxLines: 1))
       ..pushStyle(
         ui.TextStyle(
           color: color,
           fontFamily: _iconFontFamily(icon),
-          fontVariations: const [
-            ui.FontVariation('opsz', 24),
-            ui.FontVariation('wght', 400),
-          ],
+          fontVariations: _iconVariations,
           fontSize: size,
           height: 1.0,
         ),
@@ -437,7 +444,7 @@ class TopicCardLayout {
     required bool messageStyle,
     required List<(String, bool)> titleSegments,
     required List<(IconData, Color)> titleIconSpecs,
-    required bool parseTitleEmoji,
+    required bool parseEmoji,
     required String Function(String name) emojiUrlOf,
     required bool isUnread,
     required bool isFullyRead,
@@ -485,6 +492,7 @@ class TopicCardLayout {
     extraTexts.clear();
     titleIcons.clear();
     titleEmojis.clear();
+    excerptEmojis.clear();
     bandIcons.clear();
     statsIcons.clear();
 
@@ -652,7 +660,7 @@ class TopicCardLayout {
         );
         tb.addText(text);
         tb.pop();
-      } else if (parseTitleEmoji && text.contains(':')) {
+      } else if (parseEmoji && text.contains(':')) {
         emojiNames.addAll(_addTextWithEmoji(tb, text, titleFontSize));
       } else {
         tb.addText(text);
@@ -680,6 +688,7 @@ class TopicCardLayout {
 
     // ── 摘要 / blurb ─────────────────────────────────────────
     excerpt = null;
+    final excerptEmojiNames = <String>[];
     final exSegments =
         excerptSegments ??
         (excerptText != null && excerptText.isNotEmpty
@@ -710,12 +719,24 @@ class TopicCardLayout {
           );
           ex.addText(text);
           ex.pop();
+        } else if (parseEmoji && text.contains(':')) {
+          // 摘要/blurb 由 cooked 还原,短代码是 cooked 已判定的表情
+          excerptEmojiNames.addAll(
+            _addTextWithEmoji(ex, text, 12, inline: true),
+          );
         } else {
           ex.addText(text);
         }
       }
       final exW = messageStyle ? innerWidth - 50 : contentW;
       excerpt = ex.build()..layout(ui.ParagraphConstraints(width: exW));
+      final exBoxes = excerpt!.getBoxesForPlaceholders();
+      for (var i = 0; i < exBoxes.length && i < excerptEmojiNames.length; i++) {
+        excerptEmojis.add((
+          exBoxes[i].toRect(),
+          emojiUrlOf(excerptEmojiNames[i]),
+        ));
+      }
     }
 
     // ── 署名(普通)/ 发件人(私信)与时间 ─────────────────────
@@ -1067,12 +1088,12 @@ class TopicCardLayout {
   List<String> _addTextWithEmoji(
     ui.ParagraphBuilder b,
     String text,
-    double fontSize,
-  ) {
+    double fontSize, {
+    bool? inline,
+  }) {
     final names = <String>[];
-    final re = RegExp(r':([a-z0-9_+\-]+):');
     var last = 0;
-    for (final m in re.allMatches(text)) {
+    for (final m in EmojiHandler.shortcodeMatches(text, inline: inline)) {
       if (m.start > last) b.addText(text.substring(last, m.start));
       names.add(m.group(1)!);
       b.addPlaceholder(

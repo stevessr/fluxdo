@@ -1,7 +1,6 @@
 import 'package:common_ui/common_ui.dart';
-import 'package:flutter/material.dart';
-
-import '../../../utils/avatar_url.dart';
+import 'package:fluxdo/utils/avatar_url.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../../models/topic.dart';

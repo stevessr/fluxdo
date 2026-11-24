@@ -50,11 +50,18 @@ void main() {
 
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    final subscription = container.listen(notificationListProvider, (_, _) {});
+    final subscription = container.listen(
+      notificationListProvider(NotificationReadFilter.all),
+      (_, _) {},
+    );
     addTearDown(subscription.close);
 
-    await container.read(notificationListProvider.future);
-    final notifier = container.read(notificationListProvider.notifier);
+    await container.read(
+      notificationListProvider(NotificationReadFilter.all).future,
+    );
+    final notifier = container.read(
+      notificationListProvider(NotificationReadFilter.all).notifier,
+    );
     expect(notifier.historyOffset, 60);
 
     final pushed = DiscourseNotification.fromJson(
@@ -62,18 +69,35 @@ void main() {
     );
     notifier.applyRealtimeUpdate(latest: pushed);
     notifier.applyRealtimeUpdate(latest: pushed);
-    expect(container.read(notificationListProvider).value!.map((n) => n.id), [
-      11,
-      10,
-    ]);
+    expect(
+      container
+          .read(notificationListProvider(NotificationReadFilter.all))
+          .value!
+          .map((n) => n.id),
+      [11, 10],
+    );
     expect(notifier.historyOffset, 0);
 
     notifier.applyRealtimeUpdate(readStatuses: {11: true});
-    expect(container.read(notificationListProvider).value!.first.read, isTrue);
+    expect(
+      container
+          .read(notificationListProvider(NotificationReadFilter.all))
+          .value!
+          .first
+          .read,
+      isTrue,
+    );
 
     // A duplicated stale event must not resurrect an already-read row.
     notifier.applyRealtimeUpdate(latest: pushed);
-    expect(container.read(notificationListProvider).value!.first.read, isTrue);
+    expect(
+      container
+          .read(notificationListProvider(NotificationReadFilter.all))
+          .value!
+          .first
+          .read,
+      isTrue,
+    );
   });
 
   test(
@@ -98,17 +122,26 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       final subscription = container.listen(
-        notificationListProvider,
+        notificationListProvider(NotificationReadFilter.all),
         (_, _) {},
       );
       addTearDown(subscription.close);
-      await container.read(notificationListProvider.future);
-      final notifier = container.read(notificationListProvider.notifier);
+      await container.read(
+        notificationListProvider(NotificationReadFilter.all).future,
+      );
+      final notifier = container.read(
+        notificationListProvider(NotificationReadFilter.all).notifier,
+      );
       await notifier.setFilter(NotificationReadFilter.unread);
 
       expect(notifier.historyOffset, 60);
       notifier.applyRealtimeUpdate(readStatuses: {50: true});
-      expect(container.read(notificationListProvider).value, isEmpty);
+      expect(
+        container
+            .read(notificationListProvider(NotificationReadFilter.all))
+            .value,
+        isEmpty,
+      );
       expect(notifier.historyOffset, 0);
       expect(notifier.hasMore, isTrue);
     },
@@ -145,20 +178,26 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       final subscription = container.listen(
-        notificationListProvider,
+        notificationListProvider(NotificationReadFilter.all),
         (_, _) {},
       );
       addTearDown(subscription.close);
-      await container.read(notificationListProvider.future);
-      final notifier = container.read(notificationListProvider.notifier);
+      await container.read(
+        notificationListProvider(NotificationReadFilter.all).future,
+      );
+      final notifier = container.read(
+        notificationListProvider(NotificationReadFilter.all).notifier,
+      );
       notifier.scheduleRealtimeSync();
 
       await Future<void>.delayed(const Duration(milliseconds: 750));
-      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
-        13,
-        12,
-        10,
-      ]);
+      expect(
+        container
+            .read(notificationListProvider(NotificationReadFilter.all))
+            .value!
+            .map((n) => n.id),
+        [13, 12, 10],
+      );
       // The recent additions are already within the new first page.
       expect(notifier.historyOffset, 60);
       expect(notifier.hasMore, isTrue);
@@ -186,13 +225,17 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       final subscription = container.listen(
-        notificationListProvider,
+        notificationListProvider(NotificationReadFilter.all),
         (_, _) {},
       );
       addTearDown(subscription.close);
-      await container.read(notificationListProvider.future);
+      await container.read(
+        notificationListProvider(NotificationReadFilter.all).future,
+      );
 
-      final notifier = container.read(notificationListProvider.notifier);
+      final notifier = container.read(
+        notificationListProvider(NotificationReadFilter.all).notifier,
+      );
       await notifier.setCategory(NotificationCategory.mentions);
       await notifier.setFilter(NotificationReadFilter.unread);
 
@@ -201,24 +244,35 @@ void main() {
           _notification(21, NotificationType.replied),
         ),
       );
-      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
-        20,
-      ]);
+      expect(
+        container
+            .read(notificationListProvider(NotificationReadFilter.all))
+            .value!
+            .map((n) => n.id),
+        [20],
+      );
 
       notifier.applyRealtimeUpdate(
         latest: DiscourseNotification.fromJson(
           _notification(22, NotificationType.mentioned),
         ),
       );
-      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
-        22,
-        20,
-      ]);
+      expect(
+        container
+            .read(notificationListProvider(NotificationReadFilter.all))
+            .value!
+            .map((n) => n.id),
+        [22, 20],
+      );
 
       notifier.applyRealtimeUpdate(readStatuses: {22: true});
-      expect(container.read(notificationListProvider).value!.map((n) => n.id), [
-        20,
-      ]);
+      expect(
+        container
+            .read(notificationListProvider(NotificationReadFilter.all))
+            .value!
+            .map((n) => n.id),
+        [20],
+      );
     },
   );
 }

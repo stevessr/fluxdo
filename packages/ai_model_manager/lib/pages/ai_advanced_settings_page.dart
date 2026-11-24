@@ -1,5 +1,5 @@
 import 'package:m3e_ui/m3e_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/ai_l10n.dart';
@@ -21,7 +21,7 @@ class AiAdvancedSettingsPage extends ConsumerWidget {
         children: [
           SegmentedCardGroup(
             children: [
-              SwitchListTile(
+              M3eSwitchListTile(
                 title: Text(AiL10n.current.useAppNetwork),
                 subtitle: Text(AiL10n.current.useAppNetworkSubtitle),
                 value: useAppNetwork && hasAdapterFactory,
@@ -34,7 +34,7 @@ class AiAdvancedSettingsPage extends ConsumerWidget {
                       }
                     : null,
               ),
-              SwitchListTile(
+              M3eSwitchListTile(
                 title: Text(AiL10n.current.partialImagesTitle),
                 subtitle: Text(AiL10n.current.partialImagesSubtitle),
                 value: partialEnabled,

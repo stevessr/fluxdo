@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:common_ui/common_ui.dart';
 import 'package:flutter/rendering.dart'
     show
         BoxHitTestResult,
@@ -31,6 +32,7 @@ import '../../providers/download_provider.dart';
 import '../../providers/core_providers.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/preloaded_data_service.dart';
+import '../../services/external_plugin_service.dart';
 import '../../widgets/markdown_editor/long_image_upload_dialog.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
@@ -38,6 +40,7 @@ import '../../utils/url_helper.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
+import '../../widgets/chat/chat_thread_preview_card.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
@@ -234,8 +237,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => _PinnedMessagesSheet(
         channelId: widget.channelId,
@@ -283,8 +286,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     await showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => _ChatMessageFlagSheet(
         channelId: widget.channelId,
@@ -635,6 +638,44 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     setState(() => _showMentionSuggestions = false);
   }
 
+  /// Companion images are chat attachments, not post markdown.
+  /// Do not consume a result while a thread dialog or another composer owns
+  /// the topmost route.
+  void _onPluginImageAvailable(GeneratedPluginImage image) {
+    if (!mounted) return;
+    unawaited(_attachGeneratedImage(image));
+  }
+
+  Future<void> _attachGeneratedImage(GeneratedPluginImage image) async {
+    if (!mounted) return;
+    setState(() => _isUploadingImage = true);
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        p.join(
+          directory.path,
+          '${DateTime.now().microsecondsSinceEpoch}_${image.fileName}',
+        ),
+      );
+      await file.writeAsBytes(image.bytes);
+      if (!mounted) return;
+      final ok = await _uploadAndTrackImage(file.path);
+      if (mounted && !ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.chat_upload_failed('1/1'))),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.chat_upload_failed('1/1'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
+  }
+
   /// 多选并逐张上传图片附件；每张选完立即进预览条（uploadId 为 null 表示上传中）
   Future<void> _pickAndUploadImage() async {
     final images = await ImagePicker().pickMultiImage();
@@ -968,8 +1009,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     showAppBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SizedBox(
         height: MediaQuery.of(ctx).size.height * 0.45,
@@ -992,8 +1033,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
   void _showQuickReactionPicker(ChatMessage message) {
     showAppBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) {
         final theme = Theme.of(ctx);
@@ -1034,15 +1075,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   )
                                   .toggleReaction(message.id, emoji);
                             },
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: context.shapes.borderRadius(20),
                             child: Container(
                               width: 44,
                               height: 44,
                               alignment: Alignment.center,
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: theme.colorScheme.surfaceContainerHighest
                                     .withValues(alpha: 0.7),
-                                shape: BoxShape.circle,
+                                shape: context.shapes.circle(),
                               ),
                               child: EmojiText(
                                 ':$emoji:',
@@ -1055,15 +1096,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             Navigator.pop(ctx);
                             _showFullEmojiPickerForReaction(message);
                           },
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: context.shapes.borderRadius(20),
                           child: Container(
                             width: 44,
                             height: 44,
                             alignment: Alignment.center,
-                            decoration: BoxDecoration(
+                            decoration: ShapeDecoration(
                               color: theme.colorScheme.primaryContainer
                                   .withValues(alpha: 0.8),
-                              shape: BoxShape.circle,
+                              shape: context.shapes.circle(),
                             ),
                             child: Icon(
                               Icons.add_rounded,
@@ -1095,8 +1136,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
       if (!canModerate) return;
       showAppBottomSheet(
         context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
         ),
         builder: (ctx) => SafeArea(
           child: Column(
@@ -1138,8 +1179,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
 
     showAppBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: context.shapes.radius(16)),
       ),
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
@@ -1182,15 +1223,17 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                           )
                                           .toggleReaction(message.id, emoji);
                                     },
-                                    borderRadius: BorderRadius.circular(24),
+                                    borderRadius: context.shapes.borderRadius(
+                                      24,
+                                    ),
                                     child: Container(
                                       padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
+                                      decoration: ShapeDecoration(
                                         color: Theme.of(ctx)
                                             .colorScheme
                                             .surfaceContainerHighest
                                             .withValues(alpha: 0.7),
-                                        shape: BoxShape.circle,
+                                        shape: ctx.shapes.circle(),
                                       ),
                                       child: EmojiText(
                                         ':$emoji:',
@@ -1210,15 +1253,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                               Navigator.pop(ctx);
                               _showFullEmojiPickerForReaction(message);
                             },
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: context.shapes.borderRadius(24),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
+                              decoration: ShapeDecoration(
                                 color: Theme.of(ctx)
                                     .colorScheme
                                     .primaryContainer
                                     .withValues(alpha: 0.7),
-                                shape: BoxShape.circle,
+                                shape: context.shapes.circle(),
                               ),
                               child: Icon(
                                 Icons.add_rounded,
@@ -1476,10 +1519,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                 controller: _searchController,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  hintText: '搜索此对话中的消息',
-                  border: InputBorder.none,
-                ),
+                decoration: const InputDecoration(hintText: '搜索此对话中的消息')
+                    .withoutBorder(),
                 onSubmitted: _runChannelSearch,
               ),
               actions: [
@@ -1890,7 +1931,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.push_pin_rounded,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).selected,
               ),
               title: Text(context.l10n.chat_view_pinned_messages),
             ),
@@ -1903,7 +1944,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.forum_outlined,
-                color: theme.colorScheme.primary,
+                color: UiEmphasis.of(theme).accent,
               ),
               title: const Text('消息串列表'),
             ),
@@ -2024,7 +2065,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
             color: theme.colorScheme.surfaceContainerHighest.withValues(
               alpha: 0.6,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: context.shapes.borderRadius(12),
           ),
           child: Text(
             TimeUtils.formatShortDate(date),
@@ -2290,7 +2331,15 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                             decoration: InputDecoration(
                               hintText: context.l10n.chat_input_hint,
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: context.shapes.borderRadius(20),
                                 borderSide: BorderSide.none,
                               ),
                               filled: true,
@@ -2346,6 +2395,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                   SizedBox(
                     height: 280,
                     child: EmojiStickerPanel(
+                      onGeneratedImage: _onPluginImageAvailable,
                       onEmojiSelected: _onEmojiSelected,
                       onStickerSelected: _onStickerSelected,
                       onBackspace: _onEmojiBackspace,
@@ -2380,7 +2430,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           Icon(
             isEditing ? Icons.edit_outlined : Icons.reply_rounded,
             size: 18,
-            color: theme.colorScheme.primary,
+            color: UiEmphasis.of(theme).accent,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -2436,7 +2486,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
     return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: context.shapes.borderRadius(8),
           child: upload.path.toLowerCase().endsWith('.svg')
               ? Container(
                   width: 64,
@@ -2473,9 +2523,9 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
           child: GestureDetector(
             onTap: () => _removeUpload(index),
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: ShapeDecoration(
                 color: Colors.black54,
-                shape: BoxShape.circle,
+                shape: context.shapes.circle(),
               ),
               child: const Icon(
                 Icons.close_rounded,
@@ -2580,7 +2630,7 @@ class _StickyChatMessageGroup extends StatelessWidget {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
+            InteractionPageRoute(
               builder: (_) => UserProfilePage(username: avatarUser.username),
             ),
           );
@@ -2857,7 +2907,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
+              InteractionPageRoute(
                 builder: (_) =>
                     UserProfilePage(username: message.user!.username),
               ),
@@ -3112,9 +3162,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                   color: theme.colorScheme.surfaceContainerHighest.withValues(
                     alpha: 0.92,
                   ),
-                  shape: const CircleBorder(),
+                  shape: context.shapes.circle(),
                   child: InkWell(
-                    customBorder: const CircleBorder(),
+                    customBorder: context.shapes.circle(),
                     onTap: onReactButtonTap,
                     child: SizedBox(
                       width: 28,
@@ -3192,7 +3242,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                           decoration: BoxDecoration(
                             color: theme.colorScheme.surfaceContainerHighest
                                 .withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: context.shapes.borderRadius(8),
                             border: Border(
                               left: BorderSide(
                                 color: theme.colorScheme.primary,
@@ -3206,7 +3256,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                               Icon(
                                 Icons.reply,
                                 size: 14,
-                                color: theme.colorScheme.primary,
+                                color: UiEmphasis.of(theme).accent,
                               ),
                               const SizedBox(width: 4),
                               Flexible(
@@ -3278,14 +3328,16 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                           color: isOwnMessage
                               ? theme.colorScheme.primaryContainer
                               : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16).copyWith(
-                            bottomLeft: isOwnMessage
-                                ? const Radius.circular(16)
-                                : const Radius.circular(4),
-                            bottomRight: isOwnMessage
-                                ? const Radius.circular(4)
-                                : const Radius.circular(16),
-                          ),
+                          borderRadius: context.shapes
+                              .borderRadius(16)
+                              .copyWith(
+                                bottomLeft: isOwnMessage
+                                    ? context.shapes.radius(16)
+                                    : context.shapes.radius(4),
+                                bottomRight: isOwnMessage
+                                    ? context.shapes.radius(4)
+                                    : context.shapes.radius(16),
+                              ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3313,7 +3365,8 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                         );
                                       },
                                       child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: context.shapes
+                                            .borderRadius(8),
                                         child: CachedImage(
                                           url: url,
                                           width: 180,
@@ -3334,7 +3387,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                   color: theme.colorScheme.surface.withValues(
                                     alpha: 0.55,
                                   ),
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: context.shapes.borderRadius(10),
                                   clipBehavior: Clip.antiAlias,
                                   child: InkWell(
                                     onTap: isMultiSelectMode
@@ -3527,7 +3580,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                 onTap: () => onToggleReaction(r.emoji),
                                 onLongPress: () =>
                                     _showChatReactionUsers(context, r),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: context.shapes.borderRadius(12),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 6,
@@ -3544,7 +3597,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                                                 .withValues(alpha: 0.5),
                                       width: 1,
                                     ),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: context.shapes.borderRadius(
+                                      12,
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -3691,7 +3746,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  InteractionPageRoute(
                     builder: (_) => UserProfilePage(username: user.username),
                   ),
                 );
@@ -3765,7 +3820,7 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.5,
                 ),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: context.shapes.borderRadius(12),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -3816,74 +3871,9 @@ class _ChatThreadIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final preview = thread.preview;
-    final replyCount = preview?.replyCount ?? thread.replyCount;
-    final lastUser = preview?.lastReplyUser;
-    final lastName = lastUser?.name ?? lastUser?.username;
-    final excerpt = preview?.lastReplyExcerpt?.trim();
-    final time = preview?.lastReplyCreatedAt != null
-        ? TimeUtils.formatRelativeTime(preview!.lastReplyCreatedAt!)
-        : null;
-
     return Padding(
       padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
-      child: Material(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.55,
-        ),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.forum_outlined,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$replyCount 条回复${lastName != null ? ' · $lastName' : ''}'
-                        '${time != null ? ' · $time' : ''}',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (excerpt != null && excerpt.isNotEmpty)
-                        Text(
-                          excerpt,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      child: ChatThreadReplyCard(thread: thread, onTap: onTap),
     );
   }
 }
@@ -4124,7 +4114,7 @@ class _PinnedMessagesSheet extends ConsumerWidget {
                 color: theme.colorScheme.onSurfaceVariant.withValues(
                   alpha: 0.4,
                 ),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: context.shapes.borderRadius(2),
               ),
             ),
           ),
@@ -4135,7 +4125,7 @@ class _PinnedMessagesSheet extends ConsumerWidget {
                 Icon(
                   Icons.push_pin_rounded,
                   size: 20,
-                  color: theme.colorScheme.primary,
+                  color: UiEmphasis.of(theme).selected,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -4195,7 +4185,7 @@ class _PinnedMessagesSheet extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: InkWell(
                         onTap: () => onMessageTap(msg),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: context.shapes.borderRadius(8),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

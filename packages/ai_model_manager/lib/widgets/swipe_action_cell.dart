@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:common_ui/common_ui.dart';
 
@@ -246,16 +246,16 @@ class _SwipeActionCellState extends State<SwipeActionCell>
     final actions = widget.trailingActions;
     if (actions.isEmpty) return;
 
-    showAppBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
         return AppSheetScaffold(
           showCloseButton: false,
           contentPadding: EdgeInsets.zero,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
             children: [
               ...actions.map((action) {
                 return ListTile(

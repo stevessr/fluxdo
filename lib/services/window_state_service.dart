@@ -5,9 +5,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:screen_retriever/screen_retriever.dart';
+import 'package:screen_retriever/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/legacy.dart';
 
 /// 桌面窗口状态持久化服务
 ///

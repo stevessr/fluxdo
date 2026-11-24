@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:common_ui/common_ui.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:image_picker/image_picker.dart';
@@ -132,7 +132,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
     // A third-party scanner receives the plaintext QR payload, including
     // the API key (which may not expire) and one-time login OTP.
     final zh = Localizations.localeOf(context).languageCode == 'zh';
-    final approved = await showDialog<bool>(
+    final approved = await showInteractionDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(zh ? '外部扫码安全提醒' : 'External scanner security'),

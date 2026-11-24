@@ -113,18 +113,41 @@ void main() {
     expect(controller.expanded, isTrue);
   });
 
-  test('个人取消置顶仍归入站点置顶，管理员取消后不再置顶', () {
-    expect(
-      Topic.fromJson({'id': 1, 'pinned': false, 'unpinned': true}).pinned,
-      isTrue,
-    );
-    expect(
-      Topic.fromJson({'id': 1, 'pinned': false, 'unpinned': false}).pinned,
-      isFalse,
-    );
-    expect(
-      Topic.fromJson({'id': 1, 'pinned': false, 'unpinned': null}).pinned,
-      isFalse,
-    );
+  test('列表置顶状态遵循当前用户的 pinned，取消置顶不再归入置顶分组', () {
+    for (final unpinned in [true, false, null]) {
+      expect(
+        Topic.fromJson({'id': 1, 'pinned': false, 'unpinned': unpinned}).pinned,
+        isFalse,
+      );
+    }
+    expect(Topic.fromJson({'id': 1, 'pinned': true}).pinned, isTrue);
+    expect(Topic.fromJson({'id': 1, 'unpinned': true}).pinned, isFalse);
+  });
+
+  test('个人取消置顶后保留普通话题展示，不受置顶分组折叠影响', () {
+    final controller = PinnedTopicsController();
+    List<Topic> response({required bool cleared}) => [
+      topic(3),
+      Topic.fromJson({
+        'id': 1,
+        'pinned': !cleared,
+        'unpinned': cleared,
+        'unseen': true,
+      }),
+      topic(2, pinned: true),
+    ];
+    controller.update(response(cleared: false), identity: '首页');
+    expect(controller.pinned.map((t) => t.id), [1, 2]);
+    expect(controller.visible.map((t) => t.id), [1, 2, 3]);
+
+    controller.update(response(cleared: true), identity: '首页');
+    expect(controller.expanded, isFalse);
+    expect(controller.pinned.map((t) => t.id), [2]);
+    expect(controller.unreadCount, 0);
+    expect(controller.visible.map((t) => t.id), [3, 1]);
+
+    controller.toggle();
+    controller.update(response(cleared: true), identity: '首页');
+    expect(controller.visible.map((t) => t.id), [2, 3, 1]);
   });
 }

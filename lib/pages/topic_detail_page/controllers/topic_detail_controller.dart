@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:scroll_to_index/scroll_to_index.dart';
 import 'package:positioned_sliver_list/positioned_sliver_list.dart';
 
 import '../../../models/topic.dart';
 import '../../../services/screen_track.dart';
 import '../../../utils/scroll_jump.dart';
+import 'topic_jump_history.dart';
 
 /// 话题详情页滚动状态
 class TopicScrollState {
@@ -22,7 +23,8 @@ class TopicScrollState {
 
   const TopicScrollState({
     this.showBackToTop = false,
-    this.showBottomBar = false,
+    // 底栏承载回复入口，进入话题即显示，下滑阅读时再收起
+    this.showBottomBar = true,
     this.hasInitialScrolled = false,
     this.isPositioned = false,
     this.jumpTargetPostNumber,
@@ -65,20 +67,33 @@ class TopicScrollState {
 
 typedef PostSegmentRange = ({int firstScrollIndex, int lastScrollIndex});
 
+/// 一次远端选楼。即使两次选中同一楼，也只接收当前请求的结果。
+class TopicProgressLoad {
+  TopicProgressLoad(this.postId, this.streamIndex);
+
+  final int postId;
+  final int streamIndex;
+  bool _awaitingLayout = false;
+}
+
 // 向上分页提示和话题标题各占一个稳定列表项。
 const topicPostListLeadingItemCount = 2;
 
 class _PostScrollRequest {
   _PostScrollRequest(
     this.postNumber,
-    this.chunkIndex,
+    this.segmentIndex,
     this.scrollIndex,
-    this.done,
-  );
+    this.done, {
+    this.confirmedStreamIndex,
+    this.offset = 0,
+  });
 
   final int postNumber;
-  final int? chunkIndex;
-  int scrollIndex;
+  final int segmentIndex;
+  final double offset;
+  final int? confirmedStreamIndex;
+  int? scrollIndex;
   Future<void> done;
 }
 
@@ -95,7 +110,11 @@ class TopicDetailController extends ChangeNotifier {
   double _accumulatedScrollDelta = 0;
 
   /// 底部栏显示状态
-  final ValueNotifier<bool> showBottomBarNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> showBottomBarNotifier = ValueNotifier<bool>(true);
+
+  /// 已加载内容离顶超过阈值（回顶按钮显隐用）；与底栏显隐同理走独立
+  /// ValueNotifier，翻转时只重建按钮定位包装
+  final ValueNotifier<bool> showBackToTopNotifier = ValueNotifier<bool>(false);
 
   /// 定位完成状态
   final ValueNotifier<bool> isPositionedNotifier = ValueNotifier<bool>(false);
@@ -129,9 +148,60 @@ class TopicDetailController extends ChangeNotifier {
   Map<int, int> _scrollIndexToPostNumber = const {};
   Map<int, PostSegmentRange> _postSegmentRanges = const {};
   _PostScrollRequest? _pendingPostScroll;
+  Completer<bool>? _positioningComplete;
+  Map<int, int> _postIds = const {};
+
+  Future<bool> get positioningComplete => isPositioned
+      ? Future.value(true)
+      : (_positioningComplete?.future ?? Future.value(false));
+
+  TopicReadingPosition? captureReadingPosition() {
+    final anchor = postListController.anchor;
+    if (anchor == null) return null;
+    var index = anchor.index;
+    var offset = -anchor.offsetInItem;
+    // 话题标题和分页提示也可能位于视口顶部，按首帖的相对位置保存。
+    while (index < topicPostListLeadingItemCount) {
+      offset += postListController.extentForIndex(index).$1;
+      index++;
+    }
+    final scrollIndex = index - topicPostListLeadingItemCount;
+    final postNumber = _scrollIndexToPostNumber[scrollIndex];
+    final first = _postNumberToScrollIndex[postNumber];
+    if (postNumber == null || first == null) return null;
+    return TopicReadingPosition(
+      postNumber: postNumber,
+      postId: _postIds[postNumber],
+      segmentIndex: scrollIndex - first,
+      offset: offset,
+    );
+  }
+
+  Future<bool> restoreReadingPosition(TopicReadingPosition position) async {
+    final first = _postNumberToScrollIndex[position.postNumber];
+    final range = _postSegmentRanges[position.postNumber];
+    if (!postListController.isAttached || first == null || range == null) {
+      return false;
+    }
+    final requested = first + position.segmentIndex;
+    final valid =
+        requested >= range.firstScrollIndex &&
+        requested <= range.lastScrollIndex;
+    return _jumpToMappedPost(
+      position.postNumber,
+      valid ? position.segmentIndex : 0,
+      valid ? requested : first,
+      offset: valid ? position.offset : 0,
+    );
+  }
 
   /// stream 索引
   final ValueNotifier<int> streamIndexNotifier = ValueNotifier<int>(1);
+
+  /// 底栏专用，从 0 到总楼数，包含当前楼层内已经滚过的部分。
+  final ValueNotifier<double> readingPositionNotifier = ValueNotifier(0.0);
+  final progressLoad = ValueNotifier<TopicProgressLoad?>(null);
+  double? _viewportReadingPosition;
 
   /// 视口当前帖号(eyeline 上报)的细粒度通知 —— TOC 显隐门控等用;
   /// 独立 ValueNotifier 是因为滚动期它高频变化,不能走 ChangeNotifier
@@ -216,6 +286,9 @@ class TopicDetailController extends ChangeNotifier {
       if (_scrollState.showBottomBar != newState.showBottomBar) {
         showBottomBarNotifier.value = newState.showBottomBar;
       }
+      if (_scrollState.showBackToTop != newState.showBackToTop) {
+        showBackToTopNotifier.value = newState.showBackToTop;
+      }
       if (_scrollState.isPositioned != newState.isPositioned) {
         isPositionedNotifier.value = newState.isPositioned;
       }
@@ -267,8 +340,32 @@ class TopicDetailController extends ChangeNotifier {
     _handleBottomBarScrollDelta(delta);
   }
 
+  /// 底栏是否随滚动自动隐藏（偏好开关）；关闭时立即恢复显示并常驻
+  bool _autoHideBottomBar = true;
+  set autoHideBottomBar(bool value) {
+    if (_autoHideBottomBar == value) return;
+    _autoHideBottomBar = value;
+    _accumulatedScrollDelta = 0;
+    if (!value && !_scrollState.showBottomBar) {
+      _scrollState = _scrollState.copyWith(showBottomBar: true);
+      showBottomBarNotifier.value = true;
+    }
+  }
+
+  /// 快捷回复展开期间底栏必须常驻：滚动帖子不能把输入框收走
+  bool _holdBottomBar = false;
+  set holdBottomBar(bool value) {
+    if (_holdBottomBar == value) return;
+    _holdBottomBar = value;
+    _accumulatedScrollDelta = 0;
+    if (value && !_scrollState.showBottomBar) {
+      _scrollState = _scrollState.copyWith(showBottomBar: true);
+      showBottomBarNotifier.value = true;
+    }
+  }
+
   void _handleBottomBarScrollDelta(double delta) {
-    if (delta == 0) return;
+    if (delta == 0 || !_autoHideBottomBar || _holdBottomBar) return;
 
     if ((_accumulatedScrollDelta > 0 && delta < 0) ||
         (_accumulatedScrollDelta < 0 && delta > 0)) {
@@ -292,18 +389,26 @@ class TopicDetailController extends ChangeNotifier {
 
   /// 找到初始定位楼层在当前加载窗口中的位置。
   int findInitialPostIndex(List<Post> posts) {
-    if (_scrollState.initialPostNumber == null || posts.isEmpty) return 0;
-    for (int i = 0; i < posts.length; i++) {
-      if (posts[i].postNumber >= _scrollState.initialPostNumber!) {
-        return i;
-      }
-    }
-    return 0;
+    final number = _scrollState.initialPostNumber;
+    return number == null ? 0 : (postIndexAtOrAfter(posts, number) ?? 0);
+  }
+
+  /// 按票排序的回复可能不按楼号递增。目标已删除时才取其后的楼层。
+  static int? postIndexAtOrAfter(List<Post> posts, int number) {
+    final exact = posts.indexWhere((post) => post.postNumber == number);
+    if (exact >= 0) return exact;
+    final next = posts.indexWhere((post) => post.postNumber > number);
+    return next >= 0 ? next : null;
   }
 
   /// 按楼层号定位到已显示数据中的帖子，允许目标尚未物化。
   /// 返回 false 时调用方需先应用新的数据窗口。
-  Future<bool> scrollToPost(int postNumber, List<Post> posts) async {
+  Future<bool> scrollToPost(
+    int postNumber,
+    List<Post> posts, {
+    int? confirmedStreamIndex,
+  }) async {
+    cancelProgressLoad();
     final postIndex = posts.indexWhere((p) => p.postNumber == postNumber);
     if (postIndex == -1) return false;
 
@@ -312,7 +417,12 @@ class TopicDetailController extends ChangeNotifier {
         scrollIndexForPostIndex(postIndex);
     if (postListController.isAttached) {
       if (!_postNumberToScrollIndex.containsKey(postNumber)) return false;
-      return _jumpToMappedPost(postNumber, null, scrollIndex);
+      return _jumpToMappedPost(
+        postNumber,
+        0,
+        scrollIndex,
+        confirmedStreamIndex: confirmedStreamIndex,
+      );
     }
     await scrollController.jumpToRenderedScrollIndex(scrollIndex);
     return scrollController.isIndexStateInLayoutRange(scrollIndex);
@@ -327,6 +437,7 @@ class TopicDetailController extends ChangeNotifier {
     int? chunkIndex,
     List<Post> posts,
   ) async {
+    cancelProgressLoad();
     final postIndex = posts.indexWhere((p) => p.postNumber == postNumber);
     if (postIndex == -1) return false;
 
@@ -336,7 +447,11 @@ class TopicDetailController extends ChangeNotifier {
     if (chunkIndex != null) scrollIndex += 1 + chunkIndex;
     if (postListController.isAttached) {
       if (!_postNumberToScrollIndex.containsKey(postNumber)) return false;
-      return _jumpToMappedPost(postNumber, chunkIndex, scrollIndex);
+      return _jumpToMappedPost(
+        postNumber,
+        chunkIndex == null ? 0 : 1 + chunkIndex,
+        scrollIndex,
+      );
     }
     await scrollController.jumpToRenderedScrollIndex(scrollIndex);
     return scrollController.isIndexStateInLayoutRange(scrollIndex);
@@ -344,35 +459,52 @@ class TopicDetailController extends ChangeNotifier {
 
   Future<bool> _jumpToMappedPost(
     int postNumber,
-    int? chunkIndex,
-    int scrollIndex,
-  ) async {
+    int segmentIndex,
+    int scrollIndex, {
+    int? confirmedStreamIndex,
+    double offset = 0,
+  }) async {
     final request = _PostScrollRequest(
       postNumber,
-      chunkIndex,
+      segmentIndex,
       scrollIndex,
       postListController.jumpToIndex(
         scrollIndex + topicPostListLeadingItemCount,
+        offset: offset,
       ),
+      confirmedStreamIndex: confirmedStreamIndex,
+      offset: offset,
     );
-    _pendingPostScroll = request;
+    _setPendingPostScroll(request);
     // 分页可能在下一次布局前改变索引。等待重映射后的最终定位完成。
     while (identical(_pendingPostScroll, request)) {
       final done = request.done;
       await done;
       if (!identical(_pendingPostScroll, request)) return false;
       if (identical(done, request.done)) {
-        _pendingPostScroll = null;
-        return true;
+        _setPendingPostScroll(null);
+        return request.scrollIndex != null;
       }
     }
     return false;
   }
 
-  void _cancelPostScroll() {
-    _pendingPostScroll = null;
+  void _setPendingPostScroll(_PostScrollRequest? request) {
+    final previousIndex = _pendingPostScroll?.confirmedStreamIndex;
+    _pendingPostScroll = request;
+    if (previousIndex != request?.confirmedStreamIndex) _syncReadingProgress();
+  }
+
+  void _cancelPostScroll({TopicProgressLoad? keepLoad}) {
+    _positioningComplete?.complete(false);
+    _positioningComplete = null;
+    if (!identical(progressLoad.value, keepLoad)) cancelProgressLoad();
+    _setPendingPostScroll(null);
     postListController.cancelPositioning();
   }
+
+  /// 新跳转或视图切换后，旧定位不再继续驱动当前列表。
+  void cancelPendingScroll() => _cancelPostScroll();
 
   /// 回到顶部
   Future<void> scrollToTop() async {
@@ -388,7 +520,7 @@ class TopicDetailController extends ChangeNotifier {
       return;
     }
 
-    scrollController.animateTo(
+    await scrollController.animateTo(
       scrollController.position.minScrollExtent,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
@@ -416,8 +548,11 @@ class TopicDetailController extends ChangeNotifier {
   }
 
   /// 准备跳转到帖子（重新加载数据）
-  void prepareJumpToPost(int postNumber) {
-    _cancelPostScroll();
+  void prepareJumpToPost(int postNumber, {TopicProgressLoad? load}) {
+    _cancelPostScroll(keepLoad: load);
+    _positioningComplete = Completer<bool>();
+    load?._awaitingLayout = true;
+    _viewportReadingPosition = null;
     positionRevision++;
     _updateScrollState(
       TopicScrollState(
@@ -472,8 +607,14 @@ class TopicDetailController extends ChangeNotifier {
   void markPositioned() {
     if (!_scrollState.isPositioned) {
       _scrollState = _scrollState.copyWith(isPositioned: true);
+      if (progressLoad.value?._awaitingLayout == true) {
+        progressLoad.value = null;
+      }
+      _syncReadingProgress();
       isPositionedNotifier.value = true;
     }
+    _positioningComplete?.complete(true);
+    _positioningComplete = null;
   }
 
   /// 清除跳转目标
@@ -482,6 +623,7 @@ class TopicDetailController extends ChangeNotifier {
   }
 
   void updateScrollIndexMapping(Map<int, int> mapping, List<Post> posts) {
+    _postIds = {for (final post in posts) post.postNumber: post.id};
     _postIndexToScrollIndex = Map.unmodifiable(mapping);
     _postNumberToScrollIndex = {
       for (final entry in mapping.entries)
@@ -491,15 +633,17 @@ class TopicDetailController extends ChangeNotifier {
     if (request == null) return;
     final postIndex = _postNumberToScrollIndex[request.postNumber];
     if (postIndex == null) {
-      _cancelPostScroll();
+      // 映射在列表构建中更新。先停止定位，待请求完成后再通知底栏。
+      request.scrollIndex = null;
+      postListController.cancelPositioning();
       return;
     }
-    final scrollIndex =
-        postIndex + (request.chunkIndex == null ? 0 : 1 + request.chunkIndex!);
+    final scrollIndex = postIndex + request.segmentIndex;
     if (scrollIndex != request.scrollIndex) {
       request.scrollIndex = scrollIndex;
       request.done = postListController.jumpToIndex(
         scrollIndex + topicPostListLeadingItemCount,
+        offset: request.offset,
       );
     }
   }
@@ -507,6 +651,8 @@ class TopicDetailController extends ChangeNotifier {
   /// 当前列表尚未应用目标帖子时，发起一次新的首帧定位。
   void jumpToPostLocally(int postNumber) {
     _cancelPostScroll();
+    _positioningComplete = Completer<bool>();
+    _viewportReadingPosition = null;
     positionRevision++;
     // 重置可见性数据
     resetVisibility();
@@ -615,10 +761,41 @@ class TopicDetailController extends ChangeNotifier {
 
   /// 更新 stream 索引
   void updateStreamIndex(int newIndex) {
-    if (newIndex != _currentVisibleStreamIndex) {
-      _currentVisibleStreamIndex = newIndex;
-      streamIndexNotifier.value = newIndex;
+    _currentVisibleStreamIndex = newIndex;
+    _syncReadingProgress();
+  }
+
+  void updateReadingPosition(double floorsRead) {
+    _viewportReadingPosition = floorsRead;
+    _syncReadingProgress();
+  }
+
+  void _syncReadingProgress() {
+    // 松手时先显示选中的楼层，等待请求和布局期间继续记录真实位置。
+    final confirmed =
+        progressLoad.value?.streamIndex ??
+        _pendingPostScroll?.confirmedStreamIndex;
+    streamIndexNotifier.value = confirmed ?? _currentVisibleStreamIndex;
+    if (confirmed != null) {
+      readingPositionNotifier.value = (confirmed - 1).toDouble();
+    } else if (isPositioned) {
+      readingPositionNotifier.value =
+          _viewportReadingPosition ??
+          (_currentVisibleStreamIndex - 1).toDouble();
     }
+  }
+
+  TopicProgressLoad beginProgressLoad(int postId, int streamIndex) {
+    final load = TopicProgressLoad(postId, streamIndex);
+    progressLoad.value = load;
+    _syncReadingProgress();
+    return load;
+  }
+
+  void cancelProgressLoad() {
+    if (progressLoad.value == null) return;
+    progressLoad.value = null;
+    _syncReadingProgress();
   }
 
   /// 更新滚动索引到帖子号的映射（长帖子分段导航使用）
@@ -650,6 +827,7 @@ class TopicDetailController extends ChangeNotifier {
     _cancelPostScroll();
     // 滚动相关
     showBottomBarNotifier.dispose();
+    showBackToTopNotifier.dispose();
     isPositionedNotifier.dispose();
     postListController.dispose();
     scrollController.dispose();
@@ -662,6 +840,8 @@ class TopicDetailController extends ChangeNotifier {
     // 可见性相关
     _screenTrackThrottleTimer?.cancel();
     streamIndexNotifier.dispose();
+    readingPositionNotifier.dispose();
+    progressLoad.dispose();
     viewportPostNumberNotifier.dispose();
 
     super.dispose();

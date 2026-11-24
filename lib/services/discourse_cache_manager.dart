@@ -51,6 +51,7 @@ bool _isAvatarUrl(String url) {
     return url.toLowerCase().contains('/user_avatar/');
   }
 }
+
 /// 创建 Discourse 图片 Provider
 ///
 /// 用于需要 ImageProvider 的场景（CircleAvatar、DecorationImage 等）
@@ -67,7 +68,8 @@ bool _isAvatarUrl(String url) {
 /// 头像例外只影响 avatar，不把正文动图重新暴露给旧的 GIF disposal bug；
 /// [MultiFrameImageStreamCompleter] 仍会让 GIF/APNG/WebP 正常播放。
 ///
-/// 需要限制解码尺寸时在外层包 decode-time 的 `ResizeImage(policy: fit)`。
+/// Flutter 静态解码路径可在外层包 `ResizeImage(policy: fit)` 限制尺寸。
+/// 原生动图不消费 Flutter 的 decode 回调；AVIF 使用自身的尺寸上限。
 ImageProvider discourseImageProvider(
   String url, {
   double scale = 1.0,
@@ -201,10 +203,14 @@ ImageProvider siteAssetImageProvider(
 ///
 /// 标准 emoji 地址(含 cooked 里的站点表情集地址)统一改写到展示表情集
 /// [EmojiHandler.displaySet],缺图 404 回退站点表情集。
-ImageProvider emojiImageProvider(String url, {double scale = 1.0}) {
+ImageProvider emojiImageProvider(
+  String url, {
+  double scale = 1.0,
+  bool usePostStyle = false,
+}) {
   // 先按用户偏好改写标准 emoji，再走统一格式分流，保留站点自定义动图与
   // AVIF 的解码能力；标准表情缺图时回退到站点表情集。
-  final displayUrl = EmojiHandler.displayUrl(url);
+  final displayUrl = usePostStyle ? EmojiHandler.displayUrl(url) : url;
   if (_isAvifUrl(displayUrl)) {
     return AvifImageProvider(
       displayUrl,
@@ -214,10 +220,8 @@ ImageProvider emojiImageProvider(String url, {double scale = 1.0}) {
   }
   if (isNativeAnimatedUrl(displayUrl)) {
     return NativeAnimatedImageProvider.fromBytesProvider(
-      loader: () => BlobImageCache.fetch(
-        BlobImageCache.emojiBucket,
-        displayUrl,
-      ),
+      loader: () =>
+          BlobImageCache.fetch(BlobImageCache.emojiBucket, displayUrl),
       tag: displayUrl,
       scale: scale,
     );
@@ -226,7 +230,7 @@ ImageProvider emojiImageProvider(String url, {double scale = 1.0}) {
     displayUrl,
     bucket: BlobImageCache.emojiBucket,
     scale: scale,
-    fallbackUrl: EmojiHandler.fallbackUrl(displayUrl),
+    fallbackUrl: usePostStyle ? EmojiHandler.fallbackUrl(displayUrl) : null,
   );
 }
 

@@ -10,12 +10,53 @@ on:
       - 'lib/widgets/common/smart_avatar.dart'
       - 'test/pages/account_manage_new_login_contract_test.dart'
       - 'test/services/avatar_cache_pool_test.dart'
+      - '.github/workflows/image-provider-cache-keys.yaml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.fvmrc'
+      - 'packages/common_ui/**'
+      - 'tool/gen_l10n.dart'
+      - 'tool/flutterw.dart'
+      - 'tool/project_prep.dart'
+      - 'lib/l10n/**'
+      - '.github/workflows/_check-scope.yml'
+      - 'lib/services/discourse_cache_manager.dart'
+      - 'lib/services/blob_image_cache.dart'
+      - 'lib/services/dio_http_client.dart'
+      - 'lib/services/image_download_task_pools.dart'
+      - 'lib/services/download_request_queue.dart'
+      - 'lib/utils/fluxdo_render_callbacks.dart'
+      - 'lib/widgets/content/discourse_html_content/lazy_image.dart'
+      - 'lib/pages/image_viewer_page.dart'
+      - 'test/services/media_download_regression_test.dart'
+      - 'lib/widgets/common/cached_image.dart'
+      - 'lib/widgets/content/discourse_image.dart'
+      - 'lib/utils/url_helper.dart'
+      - 'lib/modules/mini_apps/mini_app_icon.dart'
+      - 'lib/modules/mini_apps/mini_app_artwork_image.dart'
+      - 'lib/modules/mini_apps/mini_app_embed_card.dart'
+      - 'test/utils/url_helper_test.dart'
+      - 'test/widgets/mini_app_icon_test.dart'
+      - 'test/widgets/discourse_image_cache_reuse_test.dart'
+      - 'test/services/shared_image_provider_test.dart'
+      - 'test/services/blob_image_cache_test.dart'
+      - 'test/widgets/smart_avatar_render_test.dart'
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  scope:
+    uses: ./.github/workflows/_check-scope.yml
+    with:
+      workflow_file: .github/workflows/image-provider-cache-keys.yaml
+      patterns: >-
+        ["lib/pages/account_manage_page.dart","lib/services/avatar_cache_pool.dart","lib/widgets/common/smart_avatar.dart","test/pages/account_manage_new_login_contract_test.dart","test/services/avatar_cache_pool_test.dart",".github/workflows/image-provider-cache-keys.yaml","pubspec.yaml","pubspec.lock",".fvmrc","packages/common_ui/**","tool/gen_l10n.dart","tool/flutterw.dart","tool/project_prep.dart","lib/l10n/**",".github/workflows/_check-scope.yml","lib/services/discourse_cache_manager.dart","lib/services/blob_image_cache.dart","lib/services/dio_http_client.dart","lib/services/image_download_task_pools.dart","lib/services/download_request_queue.dart","lib/utils/fluxdo_render_callbacks.dart","lib/widgets/content/discourse_html_content/lazy_image.dart","lib/pages/image_viewer_page.dart","test/services/media_download_regression_test.dart","lib/widgets/common/cached_image.dart","lib/widgets/content/discourse_image.dart","lib/utils/url_helper.dart","lib/modules/mini_apps/mini_app_icon.dart","lib/modules/mini_apps/mini_app_artwork_image.dart","lib/modules/mini_apps/mini_app_embed_card.dart","test/utils/url_helper_test.dart","test/widgets/mini_app_icon_test.dart","test/widgets/discourse_image_cache_reuse_test.dart","test/services/shared_image_provider_test.dart","test/services/blob_image_cache_test.dart","test/widgets/smart_avatar_render_test.dart"]
+
   verify:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -25,8 +66,12 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.5'
+          flutter-version: '3.50.1'
           cache: true
+      - name: Install Flutter Linux native hook dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libgtk-3-dev libx11-dev libxi-dev
 
       - name: Prepare generated assets
         run: mkdir -p assets/certs
@@ -79,3 +124,12 @@ jobs:
           dart tool/flutterw.dart test test/services/avatar_cache_pool_test.dart
           dart tool/flutterw.dart test test/services/shared_image_provider_test.dart
           dart tool/flutterw.dart test test/services/blob_image_cache_test.dart
+          dart tool/flutterw.dart test test/services/media_download_regression_test.dart
+          dart tool/flutterw.dart test test/services/image_download_task_pools_test.dart
+
+      - name: Test avatar and post mini-app artwork rendering
+        run: |
+          dart tool/flutterw.dart test test/utils/url_helper_test.dart
+          dart tool/flutterw.dart test test/widgets/mini_app_icon_test.dart
+          dart tool/flutterw.dart test test/widgets/smart_avatar_render_test.dart
+          dart tool/flutterw.dart test test/widgets/discourse_image_cache_reuse_test.dart
