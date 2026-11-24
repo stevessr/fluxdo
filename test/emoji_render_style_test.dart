@@ -26,10 +26,15 @@ void main() {
     }
   });
 
-  test('static Noto artwork uses a downloadable PNG, not a system font', () {
-    expect(EmojiStyleAssets.staticUrlFor('grinning', 'noto'),
-      'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.png');
+  test('static styles use Discourse artwork including aliases and skin tones', () {
+    for (final set in ['noto', 'twemoji', 'fluentui', 'openmoji', 'unicode']) {
+      expect(EmojiStyleAssets.staticUrlFor('grinning', set),
+        'https://emoji.discourse-cdn.com/$set/grinning.png?v=16');
+      expect(EmojiStyleAssets.staticUrlFor('wave:t2', set, pinned: true),
+        contains('/dist/emoji/$set/wave/2.png'));
+    }
     expect(EmojiStyleAssets.staticUrlFor('grinning', 'site'), isNull);
+    expect(EmojiStyleAssets.staticUrlFor('../unsafe', 'noto'), isNull);
   });
 
   test('normal style does not request third-party artwork', () {

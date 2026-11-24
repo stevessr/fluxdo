@@ -33,3 +33,16 @@ not a live 3D model.
 These Google-hosted artworks are not included in the Fluxdo binary.
 The user-selected visuals are fetched on demand and cached by the existing
 image cache. Do not remove these credits when distributing a modified client.
+
+## Static artwork sets
+
+The appearance selector (Noto, Twemoji, Fluent UI, OpenMoji and Unicode)
+uses Discourse's generated PNG artwork, not the device's installed emoji
+font. It downloads on demand through the shared emoji cache. The public
+Discourse Emoji CDN is tried first, followed by the pinned
+[discourse-emojis distribution](https://github.com/discourse/discourse-emojis/tree/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji)
+and then the original site image. The distribution contains shortcode aliases
+and skin-tone variants. Artwork is licensed by the respective upstream
+projects; see the upstream distribution and its license notices. Both the
+static and animated/3D preferences affect post bodies only; custom emoji
+and other UI remain unchanged.

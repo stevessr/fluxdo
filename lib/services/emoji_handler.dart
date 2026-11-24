@@ -273,7 +273,7 @@ class EmojiHandler extends ChangeNotifier {
   /// 获取 emoji 的完整 URL
   ///
   /// 优先查找自定义 emoji（有服务端提供的真实 URL），
-  /// 未找到则使用标准 emoji 的确定性路径（[displaySet] 表情集）。
+  /// 未找到则使用标准 emoji 的确定性路径（[siteSet] 表情集）。
   String getEmojiUrl(String name, {String? serverUrl}) {
     final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
 
@@ -289,7 +289,7 @@ class EmojiHandler extends ChangeNotifier {
     return _buildStandardEmojiUrl(normalized);
   }
 
-  /// 标准 emoji 的确定性地址：展示表情集 + 站点 external_emoji_url 前缀。
+  /// 标准 emoji 的确定性地址：站点表情集 + 站点 external_emoji_url 前缀。
   ///
   /// Mirror Discourse buildEmojiUrl：站点把表情图托管在别的域名时按其前缀
   /// 拼接，否则落到本站 `/images/emoji/{set}/…`。

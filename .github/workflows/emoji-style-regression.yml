@@ -72,7 +72,11 @@ jobs:
           set -euo pipefail
           for url in \
             'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.webp' \
-            'https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/noto/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/fluentui/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/twemoji/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/openmoji/grinning.png' \
+            'https://raw.githubusercontent.com/discourse/discourse-emojis/b805eda63e1768ea861ff2fe00cf30c2ce2c504b/dist/emoji/unicode/grinning.png' \
             'https://fonts.gstatic.com/s/e/noto3demoji/latest/1fa99/512.png'; do
             curl --fail --location --silent --show-error --max-time 25 \
               --retry 2 --retry-delay 1 --output /dev/null "$url"

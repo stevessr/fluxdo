@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
+import '../../utils/emoji_shortcodes.dart';
 
 /// Maps standard emoji shortcodes to Google Noto Emoji artwork without changing the
 /// original Discourse shortcode or replacing site-uploaded custom emoji.
@@ -47,18 +48,153 @@ class EmojiStyleAssets {
     return unicode;
   }
 
-  /// Official static Noto artwork; no system font installation required.
-  static String? staticUrlFor(String name, String set) {
+  /// Discourse's own generated artwork sets include shortcode aliases and
+  /// tone variants. Pin the source commit for reproducible fallback downloads.
+  static const _artworkRevision = 'b805eda63e1768ea861ff2fe00cf30c2ce2c504b';
+
+  static String? staticUrlFor(String name, String set, {bool pinned = false}) {
+    if (!EmojiHandler.selectableSets.contains(set)) return null;
+    final normalized = normalizeEmojiShortcodeName(name).toLowerCase();
+    if (!RegExp(r'^[a-z0-9_+-]+(?::t[1-6])?String name, EmojiRenderStyle style) {
+    if (style == EmojiRenderStyle.normal) return null;
+    if (EmojiHandler().isCustomEmoji(name)) return null;
     final unicode = unicodeFor(name);
     if (unicode == null) return null;
-    final parts = unicode.split('_');
-    final twemoji = (parts.contains('200d') ? parts : parts.where((p) => p != 'fe0f')).join('-');
-    return switch (set) {
-      'noto' => 'https://fonts.gstatic.com/s/e/notoemoji/latest/$unicode/512.png',
-      'twemoji' => 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/$twemoji.png',
-      'openmoji' => 'https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@15.1.0/color/618x618/${twemoji.toUpperCase()}.png',
-      _ => null,
+    return urlForUnicode(unicode, style);
+  }
+
+  /// A separate, pure URL builder makes source style routing testable.
+  static String? urlForUnicode(String unicode, EmojiRenderStyle style) {
+    if (style == EmojiRenderStyle.normal || unicode.isEmpty) return null;
+    // Official Google Fonts Emoji CDN:
+    // Animated Noto Emoji: https://googlefonts.github.io/noto-emoji-animation/
+    // Noto 3D: https://googlefonts.github.io/noto-emoji-files/
+    // Both use underscore-separated Unicode scalar values, including ZWJ
+    // and variation selectors where present.
+    if (!RegExp(r'^[0-9a-f]+(?:_[0-9a-f]+)*$').hasMatch(unicode)) {
+      return null;
+    }
+    return switch (style) {
+      EmojiRenderStyle.normal => null,
+      EmojiRenderStyle.animated =>
+        'https://fonts.gstatic.com/s/e/notoemoji/latest/$unicode/512.webp',
+      EmojiRenderStyle.threeD =>
+        'https://fonts.gstatic.com/s/e/noto3demoji/latest/$unicode/512.png',
     };
+  }
+}
+
+/// One widget for post HTML, chat reactions, editor/picker and inline text.
+/// Any unsupported/missing Google Noto asset falls back to the server's real emoji.
+class StyledEmojiImage extends ConsumerWidget {
+  const StyledEmojiImage({
+    super.key,
+    required this.name,
+    this.serverUrl,
+    this.usePostStyle = false,
+    this.width,
+    this.height,
+    this.cacheWidth,
+    this.fit = BoxFit.contain,
+    this.gaplessPlayback = true,
+    this.showPlaceholder = false,
+    this.errorFallback,
+  });
+
+  final String name;
+  final String? serverUrl;
+
+  /// Opt-in only for actual floor/post body HTML. Picker, composer, reactions,
+  /// notifications, profile pages and chat always use the site's normal emoji.
+  final bool usePostStyle;
+  final double? width;
+  final double? height;
+  final int? cacheWidth;
+  final BoxFit fit;
+  final bool gaplessPlayback;
+  final bool showPlaceholder;
+  final Widget? errorFallback;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requestedStyle = usePostStyle
+        ? ref.watch(preferencesProvider.select((p) => p.emojiRenderStyle))
+        : EmojiRenderStyle.normal;
+    final style = EmojiStyleAssets.effectiveStyle(
+      requestedStyle,
+      usePostStyle: usePostStyle,
+    );
+    final set = usePostStyle
+        ? ref.watch(preferencesProvider.select((p) => p.emojiStyle))
+        : EmojiHandler.followSite;
+    return AnimatedBuilder(
+      animation: EmojiHandler(),
+      builder: (context, _) {
+        final regularUrl = EmojiHandler().getEmojiUrl(name, serverUrl: serverUrl);
+        final custom = EmojiHandler().isCustomEmoji(name);
+        final dynamicUrl = custom || !usePostStyle
+            ? null : EmojiStyleAssets.urlFor(name, style);
+        final staticUrl = custom || !usePostStyle
+            ? null : EmojiStyleAssets.staticUrlFor(name, set);
+        final pinnedUrl = staticUrl == null ? null :
+            EmojiStyleAssets.staticUrlFor(name, set, pinned: true);
+        Widget normalImage() => _image(
+          context,
+          regularUrl,
+          onError: errorFallback ?? Text(
+            name.isEmpty ? ':?:' : ':$name:',
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+          ),
+        );
+        Widget selectedStatic() {
+          if (staticUrl == null || staticUrl == regularUrl) return normalImage();
+          final fallback = pinnedUrl == null
+              ? normalImage()
+              : _image(context, pinnedUrl, onError: normalImage());
+          return _image(context, staticUrl, onError: fallback);
+        }
+        if (dynamicUrl == null) return selectedStatic();
+        return _image(context, dynamicUrl, onError: selectedStatic());
+      },
+    );
+  }
+
+  Widget _image(BuildContext context, String url, {required Widget onError}) => Image(
+    image: ResizeImage.resizeIfNeeded(
+      // The native multi-frame WebP/GIF/APNG provider has its own decode path.
+      // ResizeImage would wrap it in the static image resize pipeline, which
+      // the shared image router deliberately skips for animated sources.
+      isNativeAnimatedUrl(url) ? null : cacheWidth,
+      null,
+      emojiImageProvider(url),
+    ),
+    width: width,
+    height: height,
+    fit: fit,
+    gaplessPlayback: gaplessPlayback,
+    frameBuilder: showPlaceholder
+        ? (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) return child;
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurfaceVariant
+                    .withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SizedBox(width: width, height: height),
+            );
+          }
+        : null,
+    errorBuilder: (_, _, _) => onError,
+  );
+}
+).hasMatch(normalized)) return null;
+    final path = normalized.replaceFirst(':t', '/');
+    final encoded = path.split('/').map(Uri.encodeComponent).join('/');
+    return pinned
+        ? 'https://raw.githubusercontent.com/discourse/discourse-emojis/$_artworkRevision/dist/emoji/$set/$encoded.png'
+        : 'https://emoji.discourse-cdn.com/$set/$encoded.png?v=16';
   }
 
   static String? urlFor(String name, EmojiRenderStyle style) {
