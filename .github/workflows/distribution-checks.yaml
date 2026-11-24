@@ -2,8 +2,9 @@ name: Distribution checks
 
 on:
   workflow_dispatch:
+  # main is validated by pull_request before merge; retain direct dev checks.
   push:
-    branches: [dev, main]
+    branches: [dev]
     paths:
       - scripts/ci/*distribution_manifests.py
       - scripts/ci/publish_release.py
