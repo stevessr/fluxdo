@@ -112,7 +112,7 @@ jobs:
         run: flutter analyze --no-fatal-infos lib/main.dart
       - name: Test plugin appearance and generator page
         working-directory: packages/stevessr_generator/example
-        run: flutter test test/plugin_theme_test.dart test/generator_page_test.dart
+        run: flutter test test/plugin_theme_test.dart test/generator_page_test.dart test/interactive_preview_test.dart
       - name: Compile standalone plugin APK
         working-directory: packages/stevessr_generator/example
         run: flutter build apk --debug --target-platform android-arm64

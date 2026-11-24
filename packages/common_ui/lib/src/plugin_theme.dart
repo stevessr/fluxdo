@@ -51,7 +51,9 @@ class PluginTheme {
         'surfaceContainerHigh': scheme.surfaceContainerHigh.toARGB32(),
         'surfaceContainerHighest': scheme.surfaceContainerHighest.toARGB32(),
       },
-      'background': theme.scaffoldBackgroundColor.toARGB32(),
+      'background': (theme.scaffoldBackgroundColor.a < 1
+          ? Color.alphaBlend(theme.scaffoldBackgroundColor, scheme.surface)
+          : theme.scaffoldBackgroundColor).toARGB32(),
       'shapeScale': shapes.scale,
       'shapeMax': shapes.max,
       'inputBorder': border is UnderlineInputBorder
@@ -150,10 +152,10 @@ class PluginTheme {
         textButtonTheme: TextButtonThemeData(style: buttonStyle),
         inputDecorationTheme: InputDecorationThemeData(
           border: border,
-          enabledBorder: border.copyWith(
+          enabledBorder: border == InputBorder.none ? border : border.copyWith(
             borderSide: BorderSide(color: scheme.outline),
           ),
-          focusedBorder: border.copyWith(
+          focusedBorder: border == InputBorder.none ? border : border.copyWith(
             borderSide: BorderSide(color: scheme.primary, width: 2),
           ),
         ),

@@ -21,6 +21,15 @@ void main() {
     expect(received.extension<UiShapes>(), const UiShapes(scale: 0.5, max: 8));
   });
 
+  test('transparent host wallpaper background becomes opaque in the APK', () {
+    final original = ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff447766)),
+      scaffoldBackgroundColor: Colors.transparent,
+    );
+    final received = PluginTheme.decode(PluginTheme.encode(original))!;
+    expect(received.scaffoldBackgroundColor, original.colorScheme.surface);
+  });
+
   test('missing, corrupt and unsupported snapshots fall back', () {
     for (final value in [null, 'bad json', '{}', '{"version":2}', '{"version":1,"dark":true,"colors":{}}']) {
       expect(PluginTheme.decode(value), isNull);
