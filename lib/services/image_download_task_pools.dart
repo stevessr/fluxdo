@@ -2,10 +2,10 @@ import 'download_request_queue.dart';
 
 /// 图片下载的并发通道。主站和第三方资源分别持有自己的任务池。
 enum DownloadChannel {
-  /// KB 级小文件（例如 emoji）。
+  /// 小图（头像和 emoji，动图头像另设组内上限）。
   small,
 
-  /// 正文图片、头像、原图和外部图片。
+  /// 正文图片、原图和外部图片。
   content,
 
   /// 可能批量预取的大型贴纸原文件。
@@ -24,13 +24,21 @@ class ImageDownloadTaskPools {
 
   final String _mainHost;
 
-  final DownloadRequestQueue _mainSmall = DownloadRequestQueue(12);
+  static const smallGroupLimits = {'avatar': 6, 'animatedAvatar': 2};
+
+  final DownloadRequestQueue _mainSmall = DownloadRequestQueue(
+    12,
+    groupLimits: smallGroupLimits,
+  );
   final DownloadRequestQueue _mainContent = DownloadRequestQueue(8);
   final DownloadRequestQueue _mainSticker = DownloadRequestQueue(
     3,
     reservedHighSlots: 1,
   );
-  final DownloadRequestQueue _small = DownloadRequestQueue(12);
+  final DownloadRequestQueue _small = DownloadRequestQueue(
+    12,
+    groupLimits: smallGroupLimits,
+  );
   final DownloadRequestQueue _content = DownloadRequestQueue(6);
   final DownloadRequestQueue _sticker = DownloadRequestQueue(
     3,

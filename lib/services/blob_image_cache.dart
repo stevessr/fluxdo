@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart' show CancelToken;
 
 import 'dio_http_client.dart';
+import '../utils/image_format.dart';
 
 /// Blob 图片缓存的磁盘使用统计。
 ///
@@ -141,12 +142,7 @@ class BlobImageCache {
   /// 提升仍在下载队列中的图片优先级；离开视野时调用返回的释放回调。
   /// Cache 不拥有队列，优先级由统一 Dio 下载队列维护。
   static VoidCallback retainForeground(String bucket, String url) {
-    final channel = switch (bucket) {
-      emojiBucket || avatarBucket => DownloadChannel.small,
-      stickerOriginalBucket => DownloadChannel.sticker,
-      _ => DownloadChannel.content,
-    };
-    return DioHttpClient.retainForeground(channel, url);
+    return DioHttpClient.retainForeground(_channelOf(bucket), url);
   }
 
   /// URL 对应的唯一物理对象文件名。
@@ -230,10 +226,20 @@ class BlobImageCache {
     }
   }
 
+  /// A login/challenge page can be returned with HTTP 200. It is not an
+  /// image, even when the URL ends in .png. Do not persist or reuse it.
+  static bool _isHtmlResponse(Uint8List bytes) {
+    final prefix = String.fromCharCodes(bytes.take(512)).trimLeft().toLowerCase();
+    return prefix.startsWith('<!doctype html') ||
+        prefix.startsWith('<html') ||
+        prefix.startsWith('<head') ||
+        prefix.startsWith('<body');
+  }
+
   static Future<Uint8List?> _readObject(File object) async {
     try {
       final bytes = await object.readAsBytes();
-      if (bytes.isEmpty) return null;
+      if (bytes.isEmpty || _isHtmlResponse(bytes)) return null;
       return bytes;
     } on FileSystemException {
       return null;
@@ -395,17 +401,17 @@ class BlobImageCache {
   }
 
   static DownloadChannel _channelOf(String bucket) => switch (bucket) {
-    emojiBucket => DownloadChannel.small,
+    emojiBucket || avatarBucket => DownloadChannel.small,
     stickerOriginalBucket => DownloadChannel.sticker,
     _ => DownloadChannel.content,
   };
 
   static void bump(String bucket, String url) {
-    // 在途请求的排队优先级由 DioHttpClient 的下载调度器负责。
+    DioHttpClient.bumpPending(_channelOf(bucket), url);
   }
 
   static void sink(String bucket, String url) {
-    // 沉出视野时不取消已开始的下载。
+    DioHttpClient.sinkPending(_channelOf(bucket), url);
   }
 
   static Future<Uint8List> _downloadObject(
@@ -417,12 +423,18 @@ class BlobImageCache {
     final bytes = await DioHttpClient().fetchBytes(
       Uri.parse(url),
       channel: _channelOf(bucket),
+      smallGroup: bucket == avatarBucket
+          ? (isNativeAnimatedUrl(url) ||
+                    (Uri.tryParse(url)?.path.toLowerCase().endsWith('.avif') ?? false)
+                ? 'animatedAvatar'
+                : 'avatar')
+          : null,
       priority: priority,
       onProgress: onProgress,
     );
-    if (bytes.isEmpty) {
+    if (bytes.isEmpty || _isHtmlResponse(bytes)) {
       throw HttpException(
-        'BlobImageCache: empty body for $url',
+        'BlobImageCache: empty or HTML response',
         uri: Uri.parse(url),
       );
     }

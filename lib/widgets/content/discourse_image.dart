@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
-import '../../services/discourse/discourse_service.dart';
+import 'discourse_html_content/image_utils.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/image_decode_spec_memo.dart';
 import '../../pages/image_viewer_page.dart';
@@ -80,7 +80,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
   Future<void> _resolveUrl() async {
     final generation = ++_resolveGeneration;
     final url = UrlHelper.resolveMediaUrl(widget.url);
-    if (!url.startsWith('upload://')) {
+    if (!DiscourseImageUtils.isUploadUrl(url)) {
       setState(() {
         _resolvedUrl = url.isEmpty ? null : url;
         _isLoading = false;
@@ -95,7 +95,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
       _hasError = false;
     });
     try {
-      final resolved = await DiscourseService().resolveShortUrl(url);
+      final resolved = await DiscourseImageUtils.resolveUploadUrl(url);
       if (!mounted || generation != _resolveGeneration) return;
       final mediaUrl = UrlHelper.resolveMediaUrl(resolved ?? '');
       setState(() {

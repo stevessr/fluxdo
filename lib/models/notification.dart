@@ -280,6 +280,9 @@ class DiscourseNotification {
   final int id;
   final int userId;
   final NotificationType notificationType;
+  final int? rawNotificationTypeId;
+
+  int get notificationTypeId => rawNotificationTypeId ?? notificationType.id;
   final bool read;
   final bool highPriority;
   final DateTime createdAt;
@@ -294,6 +297,7 @@ class DiscourseNotification {
     required this.id,
     required this.userId,
     required this.notificationType,
+    this.rawNotificationTypeId,
     required this.read,
     required this.highPriority,
     required this.createdAt,
@@ -312,6 +316,7 @@ class DiscourseNotification {
       notificationType: NotificationType.fromId(
         json['notification_type'] as int,
       ),
+      rawNotificationTypeId: json['notification_type'] as int,
       read: json['read'] as bool? ?? false,
       highPriority: json['high_priority'] as bool? ?? false,
       createdAt:
@@ -369,6 +374,7 @@ class DiscourseNotification {
       id: id ?? this.id,
       userId: userId ?? this.userId,
       notificationType: notificationType ?? this.notificationType,
+      rawNotificationTypeId: notificationType == null ? rawNotificationTypeId : notificationType.id,
       read: read ?? this.read,
       highPriority: highPriority ?? this.highPriority,
       createdAt: createdAt ?? this.createdAt,

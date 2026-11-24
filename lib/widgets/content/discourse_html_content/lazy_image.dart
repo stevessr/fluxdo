@@ -40,6 +40,8 @@ class LazyImage extends StatefulWidget {
   static const int _kMaxDecodeHeight = 4096;
 
   final ImageProvider imageProvider;
+  final ImageProvider? fallbackImageProvider;
+  final String? fallbackCacheKey;
   final double? width;
   final double? height;
   final BoxFit fit;
@@ -79,6 +81,8 @@ class LazyImage extends StatefulWidget {
   const LazyImage({
     super.key,
     required this.imageProvider,
+    this.fallbackImageProvider,
+    this.fallbackCacheKey,
     this.width,
     this.height,
     this.fit = BoxFit.contain,
@@ -120,6 +124,37 @@ class _LazyImageState extends State<LazyImage> {
   /// 非 null = 正在闸门队列中排队(防重复入队;dispose/换图时出队)
   VoidCallback? _gateWaiter;
   VoidCallback? _releaseDownloadPriority;
+  bool _usingFallback = false;
+  bool _fallbackScheduled = false;
+  int _imageGeneration = 0;
+
+  String? get _activeKey =>
+      _usingFallback ? widget.fallbackCacheKey : widget.cacheKey;
+  ImageProvider get _activeImage => _usingFallback
+      ? widget.fallbackImageProvider!
+      : widget.imageProvider;
+
+  void _scheduleFallback() {
+    if (_usingFallback || _fallbackScheduled ||
+        widget.fallbackImageProvider == null) return;
+    _fallbackScheduled = true;
+    final generation = _imageGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _imageGeneration) return;
+      _fallbackScheduled = false;
+      _releaseDownloadPriority?.call();
+      _releaseDownloadPriority = null;
+      _stopRatioResolve();
+      _cancelGateWait();
+      setState(() {
+        _usingFallback = true;
+        _paintAdmitted = false;
+        _syncPaintNoted = false;
+        _resolvedRatio = null;
+      });
+      _resolveRatioIfNeeded();
+    });
+  }
 
   /// raster 大帧归因:本 State 是否已记过"缓存命中上屏"(挂载期一次,
   /// 防 rebuild 刷屏)。img+ = 新解码首绘(上传嫌疑);img≈ = 缓存图
@@ -142,11 +177,18 @@ class _LazyImageState extends State<LazyImage> {
   @override
   void didUpdateWidget(LazyImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.cacheKey != widget.cacheKey) {
+    final changed = oldWidget.cacheKey != widget.cacheKey ||
+        oldWidget.imageProvider != widget.imageProvider ||
+        oldWidget.fallbackImageProvider != widget.fallbackImageProvider ||
+        oldWidget.fallbackCacheKey != widget.fallbackCacheKey;
+    if (changed) {
+      _imageGeneration++;
+      _usingFallback = false;
+      _fallbackScheduled = false;
       _releaseDownloadPriority?.call();
       _releaseDownloadPriority = null;
     }
-    if (oldWidget.imageProvider != widget.imageProvider) {
+    if (changed) {
       _stopRatioResolve();
       _resolvedRatio = null;
       // 换图(列表 item 复用同位置 State):新图重新过首绘闸门
@@ -184,7 +226,7 @@ class _LazyImageState extends State<LazyImage> {
       info.dispose();
       final ratio = imgH == 0 ? null : imgW / imgH;
       if (ratio == null) return;
-      final key = widget.cacheKey;
+      final key = _activeKey;
       if (key != null && key.isNotEmpty) {
         _knownAspectRatios[key] = ratio;
         // 持久备忘:冷启动后首次挂载也能加载前预留精确高度
@@ -248,12 +290,12 @@ class _LazyImageState extends State<LazyImage> {
     );
     final cacheWidth = (logicalWidth * dpr).round().clamp(1, 1 << 16);
     final provider = ResizeImage(
-      widget.imageProvider,
+      _activeImage,
       width: cacheWidth,
       height: LazyImage._kMaxDecodeHeight,
       policy: ResizeImagePolicy.fit,
     );
-    final key = widget.cacheKey;
+    final key = _activeKey;
     if (key != null) ImageDecodeSpecMemo.remember(key, provider);
     return provider;
   }
@@ -353,6 +395,10 @@ class _LazyImageState extends State<LazyImage> {
         );
       },
       errorBuilder: (context, error, stackTrace) {
+        if (!_usingFallback && widget.fallbackImageProvider != null) {
+          _scheduleFallback();
+          return placeholderBox();
+        }
         Widget broken(BuildContext ctx) => Container(
           width: width,
           height: height ?? 200,
@@ -373,7 +419,7 @@ class _LazyImageState extends State<LazyImage> {
         );
         // 解码失败兜底:无 .svg 扩展名的 SVG(动态徽章服务等)会流到
         // 这里,按字节嗅探转入统一 SVG 管线;非 SVG 才显示破图。
-        final url = widget.cacheKey;
+        final url = _activeKey;
         if (url != null && url.startsWith('http')) {
           return SvgSniffFallback(
             url: url,
@@ -408,7 +454,7 @@ class _LazyImageState extends State<LazyImage> {
     // 视野优先级:cacheExtent 预建区的 cell 会 build/layout 但不 paint,
     // 首帧 paint = 真进视口 —— 把还在下载等待队列的请求提到高优
     // (Telegram 滚入视野 bumpPriority 同款语义,幂等零成本)。
-    final bumpUrl = widget.cacheKey;
+    final bumpUrl = _activeKey;
     if (bumpUrl != null && bumpUrl.startsWith('http')) {
       imageWidget = FirstPaintProbe(
         key: ValueKey(bumpUrl),
@@ -433,7 +479,7 @@ class _LazyImageState extends State<LazyImage> {
     // 即终态高度,SliverList 记账一致,不再触发回滚时的 correction 回跳。
     // 会话记忆 → 持久备忘(冷启动后首次挂载也命中)依次回退。
     var knownRatio = _resolvedRatio;
-    final memoKey = widget.cacheKey;
+    final memoKey = _activeKey;
     if (knownRatio == null && memoKey != null && memoKey.isNotEmpty) {
       knownRatio = _knownAspectRatios[memoKey];
       if (knownRatio == null) {

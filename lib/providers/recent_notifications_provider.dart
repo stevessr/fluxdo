@@ -90,7 +90,7 @@ class RecentNotificationsNotifier extends AsyncNotifier<List<DiscourseNotificati
       state = AsyncValue.data([
         for (final n in list)
           if (!n.read &&
-              (typeIds == null || typeIds.contains(n.notificationType.id)))
+              (typeIds == null || typeIds.contains(n.notificationTypeId)))
             n.copyWith(read: true)
           else
             n,
@@ -108,10 +108,19 @@ final recentNotificationsProvider =
 /// 「全部」为 null；「其他」由站点类型表减去其余分类推导，见 [typeNames]。
 enum NotificationPanelTab {
   all(null),
-  replies(['mentioned', 'group_mentioned', 'posted', 'quoted', 'replied']),
+  replies(['posted', 'quoted', 'replied']),
+  mentions(['mentioned']),
   likes(['liked', 'liked_consolidated', 'reaction']),
   messages(['private_message', 'group_message_summary']),
   bookmarks(['bookmark_reminder']),
+  assigned(['assigned']),
+  chat([
+    'chat_mention',
+    'chat_message',
+    'chat_invitation',
+    'chat_quoted',
+    'chat_watched_thread',
+  ]),
   other(null);
 
   const NotificationPanelTab(this.types);
@@ -174,7 +183,7 @@ class CategorizedNotificationsNotifier
   void addIfMatches(DiscourseNotification notification) {
     final list = state.value;
     if (list == null ||
-        !_typeIds.contains(notification.notificationType.id) ||
+        !_typeIds.contains(notification.notificationTypeId) ||
         list.any((n) => n.id == notification.id)) {
       return;
     }
