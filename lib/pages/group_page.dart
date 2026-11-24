@@ -441,7 +441,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
     }
 
     final copy = _copy(context);
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(member.owner ? copy.removeOwner : copy.makeOwner),
@@ -580,7 +581,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
   Future<void> _openGroupWebPage(String path, String title) async {
     final group = _group;
     if (group == null) return;
-    final url = '${AppConstants.baseUrl}/g/'
+    final url =
+        '${AppConstants.baseUrl}/g/'
         '${Uri.encodeComponent(group.name)}/$path';
     await WebViewPage.open(context, url, title: title);
   }
@@ -685,10 +687,8 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                   _GroupNavLabel(label: copy.activityGroup),
                   _GroupNavChip(
                     label: copy.activityPosts,
-                    onPressed: () => _openGroupWebPage(
-                      'activity/posts',
-                      copy.activityPosts,
-                    ),
+                    onPressed: () =>
+                        _openGroupWebPage('activity/posts', copy.activityPosts),
                   ),
                   const SizedBox(width: 8),
                   _GroupNavChip(
@@ -743,18 +743,14 @@ class _GroupPageState extends ConsumerState<GroupPage> {
                     const SizedBox(width: 8),
                     _GroupNavChip(
                       label: copy.manageTags,
-                      onPressed: () => _openGroupWebPage(
-                        'manage/tags',
-                        copy.manageTags,
-                      ),
+                      onPressed: () =>
+                          _openGroupWebPage('manage/tags', copy.manageTags),
                     ),
                     const SizedBox(width: 8),
                     _GroupNavChip(
                       label: copy.manageLogs,
-                      onPressed: () => _openGroupWebPage(
-                        'manage/logs',
-                        copy.manageLogs,
-                      ),
+                      onPressed: () =>
+                          _openGroupWebPage('manage/logs', copy.manageLogs),
                     ),
                     const SizedBox(width: 8),
                     _GroupNavChip(
@@ -979,9 +975,8 @@ class _GroupNavLabel extends StatelessWidget {
     padding: const EdgeInsets.only(right: 8),
     child: Text(
       label,
-      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
+      style: Theme.of(context).textTheme.labelMedium
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     ),
   );
 }

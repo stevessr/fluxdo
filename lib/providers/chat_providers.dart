@@ -85,9 +85,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
       if (_activityCallbacks.containsKey(key)) continue;
       void onActivity(MessageBusMessage event) {
         final raw = event.data;
-        if (raw is! Map ||
-            raw['type'] != 'channel' ||
-            raw['message'] is! Map) {
+        if (raw is! Map || raw['type'] != 'channel' || raw['message'] is! Map) {
           return;
         }
         final id = (raw['channel_id'] as num?)?.toInt();
@@ -119,6 +117,7 @@ class ChatChannelsNotifier extends AsyncNotifier<ChatChannelsState> {
           // 不完整的 MessageBus 消息不覆盖有效摘要。
         }
       }
+
       _activityCallbacks[key] = onActivity;
       bus.subscribe(key, onActivity);
     }
