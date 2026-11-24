@@ -58,6 +58,31 @@ class UrlHelper {
     return url;
   }
 
+  /// Normalize media URLs at the widget/cache boundary. Authenticated media
+  /// and mini-app API resources must stay on the forum origin, not its CDN.
+  /// Keep query strings (including signatures) and upload short URLs intact.
+  static String resolveMediaUrl(String value) {
+    final url = value.trim();
+    if (url.isEmpty || url.startsWith('upload://')) return url;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    if (uri.hasScheme || url.startsWith('//')) {
+      return resolveUrlWithCdn(url);
+    }
+    final path = url.startsWith('/') ? url : '/$url';
+    final sitePath = Uri.tryParse(path)?.path ?? '';
+    final prefix = _baseUri;
+    final unprefixed = prefix.isNotEmpty && sitePath.startsWith('$prefix/')
+        ? sitePath.substring(prefix.length)
+        : sitePath;
+    if (unprefixed.startsWith('/mini-app-api/') ||
+        unprefixed.startsWith('/secure-uploads/') ||
+        unprefixed.startsWith('/secure-media-uploads/')) {
+      return resolveUrl(path);
+    }
+    return resolveUrlWithCdn(path);
+  }
+
   static bool _shouldResolve(String url) {
     return url.isNotEmpty && !url.startsWith('upload://');
   }

@@ -7,9 +7,51 @@ import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/modules/mini_apps/mini_app.dart';
 import 'package:fluxdo/modules/mini_apps/mini_app_card_surface.dart';
 import 'package:fluxdo/modules/mini_apps/mini_app_icon.dart';
+import 'package:fluxdo/services/discourse_cache_manager.dart';
+import 'package:fluxdo/utils/url_helper.dart';
 import 'package:fluxdo/modules/mini_apps/mini_app_runtime_surface.dart';
 
 void main() {
+  testWidgets('relative mini app artwork uses the resolved cached image', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    UrlHelper.debugSetOverrides(baseUri: '', cdnUrl: 'https://cdn.example.com');
+    addTearDown(UrlHelper.debugClearOverrides);
+    const url = 'https://cdn.example.com/uploads/default/app.png?v=2';
+    final provider = sharedImageProvider(url, cacheWidth: 44, cacheHeight: 44);
+    final key = await provider.obtainKey(ImageConfiguration.empty);
+    final pixels = (await tester.runAsync(
+      () => createTestImage(width: 44, height: 44, cache: false),
+    ))!;
+    tester.binding.imageCache.putIfAbsent(
+      key,
+      () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: pixels))),
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: MiniAppIcon(
+            MiniApp(
+              id: 'relative',
+              name: 'App',
+              iconUrl: '/uploads/default/app.png?v=2',
+            ),
+            size: 44,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(await image.image.obtainKey(ImageConfiguration.empty), key);
+    expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.binding.imageCache.evict(key);
+  });
+
   testWidgets('启动图标的渐变底座与图片一同裁为正圆', (tester) async {
     final key = GlobalKey();
     await tester.pumpWidget(

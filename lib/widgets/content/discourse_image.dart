@@ -7,6 +7,7 @@ import '../../services/discourse/discourse_service.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/image_decode_spec_memo.dart';
 import '../../pages/image_viewer_page.dart';
+import '../../utils/url_helper.dart';
 import 'svg_view.dart';
 import '../common/hero_image.dart';
 
@@ -60,6 +61,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
   String? _resolvedUrl;
   bool _isLoading = true;
   bool _hasError = false;
+  int _resolveGeneration = 0;
 
   @override
   void initState() {
@@ -76,40 +78,38 @@ class _DiscourseImageState extends State<DiscourseImage> {
   }
 
   Future<void> _resolveUrl() async {
-    if (!widget.url.startsWith('upload://')) {
-      // 普通 URL，不需要解析
-      if (mounted) {
-        setState(() {
-          _resolvedUrl = widget.url;
-          _isLoading = false;
-          _hasError = false;
-        });
-      }
+    final generation = ++_resolveGeneration;
+    final url = UrlHelper.resolveMediaUrl(widget.url);
+    if (!url.startsWith('upload://')) {
+      setState(() {
+        _resolvedUrl = url.isEmpty ? null : url;
+        _isLoading = false;
+        _hasError = url.isEmpty;
+      });
       return;
     }
 
-    // 需要解析短链接
     setState(() {
+      _resolvedUrl = null;
       _isLoading = true;
       _hasError = false;
     });
-
     try {
-      final resolved = await DiscourseService().resolveShortUrl(widget.url);
-      if (mounted) {
-        setState(() {
-          _resolvedUrl = resolved;
-          _isLoading = false;
-          _hasError = resolved == null;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-        });
-      }
+      final resolved = await DiscourseService().resolveShortUrl(url);
+      if (!mounted || generation != _resolveGeneration) return;
+      final mediaUrl = UrlHelper.resolveMediaUrl(resolved ?? '');
+      setState(() {
+        _resolvedUrl = mediaUrl.isEmpty ? null : mediaUrl;
+        _isLoading = false;
+        _hasError = mediaUrl.isEmpty;
+      });
+    } catch (_) {
+      if (!mounted || generation != _resolveGeneration) return;
+      setState(() {
+        _resolvedUrl = null;
+        _isLoading = false;
+        _hasError = true;
+      });
     }
   }
 
@@ -170,6 +170,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
   /// multi_frame_codec 的 #85831 / #94205 bug。
   Widget _buildNativeAnimatedImage(ThemeData theme) {
     return Image(
+      key: ValueKey(_resolvedUrl),
       image: ImageDecodeSpecMemo.remember(
         _resolvedUrl!,
         discourseImageProvider(_resolvedUrl!),
@@ -200,10 +201,14 @@ class _DiscourseImageState extends State<DiscourseImage> {
         : _kMaxDecodeHeight;
 
     return Image(
-      image: sharedImageProvider(
+      key: ValueKey(_resolvedUrl),
+      image: ImageDecodeSpecMemo.remember(
         _resolvedUrl!,
-        cacheWidth: cacheWidth,
-        cacheHeight: cacheHeight,
+        sharedImageProvider(
+          _resolvedUrl!,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
+        ),
       ),
       width: widget.width,
       height: widget.height,
@@ -241,6 +246,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
     // 统一走 DiscourseSvgView:内容嗅探动画,静态 jovial_svg /
     // 动画 full_svg_flutter(首帧快照 + 点击播放 + 防注入)。
     return DiscourseSvgView(
+      key: ValueKey(_resolvedUrl),
       url: _resolvedUrl!,
       width: widget.width,
       height: widget.height,
