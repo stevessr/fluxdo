@@ -237,10 +237,11 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: core/doh_proxy
+          workspaces: core/net_core
+          # Cache the active Rust core and cross-compiled dependencies, not the legacy submodule.
           # 缓存 cargo-ndk 等全局二进制，避免每次 crates.io 探测
           cache-bin: true
-          key: android-apk-${{ matrix.arch }}-${{ env.ANDROID_NDK_VERSION }}
+          key: android-apk-net-core-${{ matrix.arch }}-${{ env.ANDROID_NDK_VERSION }}
 
       - name: Setup Android build environment
         run: |
@@ -374,12 +375,12 @@ jobs:
           EOF
           fi
 
-      # certs/ 在 submodule 中被 gitignore；project_prep 缺证书时会 cargo run gen_ca（冷编译 ~17s）。
-      # 用 openssl 预生成（与 build.rs / gen_ca 用途一致：CI 构建用占位 CA），跳过 cargo 编译。
-      - name: Pre-generate DOH proxy CA certs
+      # The active net_core embeds the CA key/cert. Generate matching resources before
+      # project_prep so it need not compile the host Rust core just to run gen_ca.
+      - name: Pre-generate network core CA certs
         run: |
           set -euo pipefail
-          cert_dir="core/doh_proxy/certs"
+          cert_dir="core/net_core/certs"
           mkdir -p "$cert_dir" assets/certs android/app/src/main/res/raw
           if [ -f "$cert_dir/ca.crt" ] && [ -f "$cert_dir/ca.key" ] && [ -f "$cert_dir/ca.der" ]; then
             echo "证书已存在，跳过生成"
@@ -389,12 +390,18 @@ jobs:
               -keyout "$cert_dir/ca.key" \
               -out "$cert_dir/ca.crt" \
               -days 3650 -nodes \
-              -subj "/CN=DOH Proxy CA/O=DOH Proxy/C=CN"
+              -subj "/CN=DOH Proxy CA/O=DOH Proxy" \
+              -addext "basicConstraints=critical,CA:TRUE" \
+              -addext "keyUsage=critical,keyCertSign,cRLSign"
             openssl x509 -in "$cert_dir/ca.crt" -outform DER -out "$cert_dir/ca.der"
             echo "已用 openssl 生成 DOH 代理 CA"
           fi
           cp -f "$cert_dir/ca.crt" assets/certs/proxy_ca.pem
           cp -f "$cert_dir/ca.der" android/app/src/main/res/raw/proxy_ca.der
+          openssl verify -CAfile "$cert_dir/ca.crt" "$cert_dir/ca.crt"
+          cmp <(openssl x509 -in "$cert_dir/ca.crt" -pubkey -noout) \
+              <(openssl pkey -in "$cert_dir/ca.key" -pubout)
+          cmp <(openssl x509 -in "$cert_dir/ca.crt" -outform DER) "$cert_dir/ca.der"
 
       - name: Build Android APK
         run: |
@@ -429,6 +436,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Ensure project preparation did not replace the CA embedded by net_core.
+          cmp -s core/net_core/certs/ca.der android/app/src/main/res/raw/proxy_ca.der
+          cmp -s core/net_core/certs/ca.crt assets/certs/proxy_ca.pem
           build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           aapt="${build_tools}/aapt"
           apksigner="${build_tools}/apksigner"
