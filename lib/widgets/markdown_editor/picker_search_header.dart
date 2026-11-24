@@ -2,7 +2,7 @@ import 'package:common_ui/common_ui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
-import '../../../../../l10n/s.dart';
+import '../../l10n/s.dart';
 
 /// 表情 / 表情包搜索的输入头部(底部弹层形态)。
 ///
