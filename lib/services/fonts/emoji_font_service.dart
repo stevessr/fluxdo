@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../network/discourse_dio.dart';
+import 'offline_resource_pack.dart';
 
 /// Color fonts are registered in private families, never in the app-wide
 /// fallback list. Each file is pinned to a Git commit and verified by its
@@ -225,6 +226,26 @@ class EmojiFontService {
       if (coverage == null) {
         await file.delete();
         bytes = null;
+      }
+    }
+    if (coverage == null) {
+      final bundled = await OfflineResourcePack.instance.copyFont(
+        'emoji_fonts/${spec.blob}.ttf',
+      );
+      if (bundled != null) {
+        try {
+          final local = await bundled.readAsBytes();
+          final verified = await compute(_verifiedCoverage, (spec, local));
+          if (verified != null) {
+            final temporary = File('${file.path}.part');
+            await temporary.writeAsBytes(local, flush: true);
+            await temporary.rename(file.path);
+            bytes = local;
+            coverage = verified;
+          }
+        } finally {
+          if (await bundled.exists()) await bundled.delete();
+        }
       }
     }
     if (coverage == null) {

@@ -11,6 +11,7 @@ import '../network/discourse_dio.dart';
 import 'font_archive.dart';
 import 'font_catalog.dart';
 import 'font_sources.dart';
+import 'offline_resource_pack.dart';
 
 /// 字体安装状态。
 sealed class FontInstallState {
@@ -229,6 +230,40 @@ class FontDownloadService extends ChangeNotifier {
     final dir = Directory('${root.path}/${entry.id}')
       ..createSync(recursive: true);
 
+    // Prefer the companion asset before DNS, latency probes or network I/O.
+    final bundled = await OfflineResourcePack.instance.copyFont(
+      'fonts/${entry.sha256}.ttf',
+    );
+    if (bundled != null) {
+      try {
+        if (!cancel.isCancelled &&
+            await bundled.length() == entry.size &&
+            await FontArchive.isFontFile(bundled.path) &&
+            await FontArchive.sha256Of(bundled.path) == entry.sha256) {
+          if (cancel.isCancelled) {
+            _cancels.remove(entry.id);
+            _setState(entry, const FontFailed(FontFailure.cancelled));
+            return;
+          }
+          final path = _installedPath(root, entry);
+          final temporary = await bundled.copy('$path.part');
+          await temporary.rename(path);
+          _setState(entry, FontInstalled(path));
+          _cancels.remove(entry.id);
+          _installed.add(entry);
+          return;
+        }
+      } catch (error) {
+        debugPrint('[Fonts] offline pack: $error');
+      } finally {
+        if (await bundled.exists()) await bundled.delete();
+      }
+    }
+    if (cancel.isCancelled) {
+      _cancels.remove(entry.id);
+      _setState(entry, const FontFailed(FontFailure.cancelled));
+      return;
+    }
     final List<FontSource> sources;
     switch (sourceKind) {
       case FontSourceKind.auto:
