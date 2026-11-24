@@ -1065,8 +1065,8 @@ class FluxdoRenderCallbacks {
   /// - policy:返回 null → 子包 fallback 占位(无 post 无法交互)。
   /// - poll:静态预览卡(从 rawHtml 解选项/属性,无投票交互)——
   ///   编辑器岛预览等场景所见即所发。
-  /// - 其余(emoji/mention/code/avatar/math/svg/video/audio/download/iframe/
-  ///   localDate/imageGrid/footnote/chat)与 forPost 完全一致(共享 static)。
+  /// - emoji 使用站点原始资源；其余(mention/code/avatar/math/svg/video/audio/
+  ///   download/iframe/localDate/imageGrid/footnote/chat)与 forPost 共享实现。
   factory FluxdoRenderCallbacks.generic({
     required String heroTagNamespace,
     int? topicId,

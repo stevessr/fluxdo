@@ -71,7 +71,7 @@ class EmojiStyleAssets {
   }
 }
 
-/// One widget for post HTML, chat reactions, editor/picker and inline text.
+/// Server emoji by default; post body renderers explicitly opt into user artwork.
 /// Any unsupported/missing Google Noto asset falls back to the server's real emoji.
 class StyledEmojiImage extends StatelessWidget {
   const StyledEmojiImage({

@@ -41,7 +41,7 @@ class CollapsedHtmlContent extends StatelessWidget {
       if (spans.isEmpty) value = value.trimLeft();
       if (last) value = value.trimRight();
       if (value.isNotEmpty) {
-        spans.addAll(EmojiText.buildEmojiSpans(context, value, style, useRenderStyle: true));
+        spans.addAll(EmojiText.buildEmojiSpans(context, value, style));
       }
       text.clear();
     }
@@ -66,12 +66,11 @@ class CollapsedHtmlContent extends StatelessWidget {
             flushText();
             final size = (style.fontSize ?? 14) * 1.2;
             final dpr = MediaQuery.devicePixelRatioOf(context);
-            // 走主项目的表情组件，保留 fork 的自定义表情渲染风格（动图 / 3D）。
+            // 摘要使用站点原始表情，正文风格选择不影响简介。
             spans.add(
               WidgetSpan(
                 alignment: PlaceholderAlignment.middle,
                 child: StyledEmojiImage(
-                   useRenderStyle: true,
                   name: alt,
                   serverUrl: UrlHelper.resolveUrlWithCdn(src!),
                   width: size,
