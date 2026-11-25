@@ -7,6 +7,7 @@ import '../../models/chat/chat_models.dart';
 import '../../utils/time_utils.dart';
 import '../common/emoji_text.dart';
 import '../common/smart_avatar.dart';
+import 'chat_surface.dart';
 
 /// Discourse excerpts may contain cooked emoji images rather than shortcodes.
 String chatThreadPreviewText(String value) {
@@ -137,11 +138,14 @@ class ChatThreadReplyCard extends StatelessWidget {
     }
     final avatars = participants.values.take(3).toList();
     return Material(
-      color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: context.shapes.borderRadius(12),
+      color: ChatSurface.incomingColor(context),
+      shape: ChatSurface.previewShape(context),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: context.shapes.borderRadius(12),
+        customBorder: RoundedSuperellipseBorder(
+          borderRadius: context.shapes.borderRadius(16),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Row(
@@ -161,7 +165,7 @@ class ChatThreadReplyCard extends StatelessWidget {
                           Flexible(
                             child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.labelLarge?.copyWith(
-                                color: theme.colorScheme.primary,
+                                color: context.emphasis.accent,
                                 fontWeight: FontWeight.w600,
                               )),
                           ),
@@ -204,7 +208,7 @@ class ChatThreadReplyCard extends StatelessWidget {
                     const SizedBox(height: 5),
                   ],
                   Text('$count 个回复', style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.primary,
+                    color: context.emphasis.accent,
                     fontWeight: FontWeight.w600,
                   )),
                 ],

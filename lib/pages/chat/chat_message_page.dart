@@ -41,6 +41,7 @@ import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/chat/chat_thread_preview_card.dart';
+import '../../widgets/chat/chat_surface.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
@@ -2289,9 +2290,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                 ? Icons.keyboard_rounded
                                 : Icons.sentiment_satisfied_alt_rounded,
                           ),
+                          isSelected: _showEmojiPicker,
                           color: _showEmojiPicker
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
+                              ? context.emphasis.selected
+                              : null,
                           tooltip: '表情与贴纸',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
@@ -2301,60 +2303,51 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           visualDensity: VisualDensity.compact,
                         ),
                         Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            focusNode: _inputFocusNode,
-                            textInputAction: TextInputAction.send,
-                            contentInsertionConfiguration:
-                                ContentInsertionConfiguration(
-                                  allowedMimeTypes: const [
-                                    'image/png',
-                                    'image/jpeg',
-                                    'image/gif',
-                                    'image/webp',
-                                    'image/avif',
-                                    'image/apng',
-                                    'image/bmp',
-                                    'image/heic',
-                                    'image/heif',
-                                  ],
-                                  onContentInserted: _handleImeContentInserted,
+                          child: InputFieldShell(
+                            radius: 20,
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: TextField(
+                              controller: _textController,
+                              focusNode: _inputFocusNode,
+                              textInputAction: TextInputAction.send,
+                              contentInsertionConfiguration:
+                                  ContentInsertionConfiguration(
+                                    allowedMimeTypes: const [
+                                      'image/png',
+                                      'image/jpeg',
+                                      'image/gif',
+                                      'image/webp',
+                                      'image/avif',
+                                      'image/apng',
+                                      'image/bmp',
+                                      'image/heic',
+                                      'image/heif',
+                                    ],
+                                    onContentInserted:
+                                        _handleImeContentInserted,
+                                  ),
+                              maxLines: 5,
+                              minLines: 1,
+                              onTap: () {
+                                if (_showEmojiPicker) {
+                                  setState(() => _showEmojiPicker = false);
+                                }
+                              },
+                              onSubmitted: (_) => _sendMessageOrUpdate(),
+                              decoration: InputDecoration(
+                                hintText: context.l10n.chat_input_hint,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
                                 ),
-                            maxLines: 5,
-                            minLines: 1,
-                            onTap: () {
-                              if (_showEmojiPicker) {
-                                setState(() => _showEmojiPicker = false);
-                              }
-                            },
-                            onSubmitted: (_) => _sendMessageOrUpdate(),
-                            decoration: InputDecoration(
-                              hintText: context.l10n.chat_input_hint,
-                              border: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor:
-                                  theme.colorScheme.surfaceContainerHighest,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              isDense: true,
+                                isDense: true,
+                              ).withoutBorder(),
                             ),
                           ),
                         ),
                         const SizedBox(width: 4),
-                        IconButton(
+                        IconButton.filled(
+                          style: ChatSurface.sendStyle(context),
                           onPressed: (_isSending || _isUploadingImage)
                               ? null
                               : _sendMessageOrUpdate,
@@ -2364,7 +2357,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   height: 18,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: theme.colorScheme.onPrimaryContainer,
                                   ),
                                 )
                               : Icon(
@@ -2377,13 +2369,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           constraints: const BoxConstraints.tightFor(
                             width: 40,
                             height: 40,
-                          ),
-                          style: IconButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primaryContainer,
-                            foregroundColor:
-                                theme.colorScheme.onPrimaryContainer,
-                            disabledBackgroundColor:
-                                theme.colorScheme.surfaceContainerHighest,
                           ),
                         ),
                       ],
@@ -3324,20 +3309,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        decoration: BoxDecoration(
-                          color: isOwnMessage
-                              ? theme.colorScheme.primaryContainer
-                              : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: context.shapes
-                              .borderRadius(16)
-                              .copyWith(
-                                bottomLeft: isOwnMessage
-                                    ? context.shapes.radius(16)
-                                    : context.shapes.radius(4),
-                                bottomRight: isOwnMessage
-                                    ? context.shapes.radius(4)
-                                    : context.shapes.radius(16),
-                              ),
+                        decoration: ChatSurface.bubble(
+                          context,
+                          isOwn: isOwnMessage,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

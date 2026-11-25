@@ -1,5 +1,7 @@
 import 'package:common_ui/common_ui.dart' show UiShapesContext;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../theme/theme_style.dart';
 
 import '../../l10n/s.dart';
 
@@ -99,26 +101,30 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
   Widget build(BuildContext context) {
     super.build(context);
     final theme = Theme.of(context);
+    final pill = context.themeStyle.navIndicator == NavIndicatorStyle.pill;
 
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Material(
-            color: theme.colorScheme.surfaceContainerLow,
+            color: pill ? theme.colorScheme.surfaceContainerLow : Colors.transparent,
             borderRadius: context.shapes.borderRadius(12),
             clipBehavior: Clip.antiAlias,
             child: TabBar(
               key: ValueKey('chat-${widget.id}-subtabs'),
               controller: _controller,
               dividerHeight: 0,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicator: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer,
-                borderRadius: context.shapes.borderRadius(10),
-              ),
-              labelColor: theme.colorScheme.onSecondaryContainer,
-              unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+              indicatorSize: pill ? TabBarIndicatorSize.tab : null,
+              // 胶囊沿用二级分类布局，其余风格继承应用 TabBarTheme。
+              indicator: pill
+                  ? BoxDecoration(
+                      color: theme.colorScheme.secondaryContainer,
+                      borderRadius: context.shapes.borderRadius(10),
+                    )
+                  : null,
+              labelColor: pill ? theme.colorScheme.onSecondaryContainer : null,
+              unselectedLabelColor: pill ? theme.colorScheme.onSurfaceVariant : null,
               tabs: [
                 _buildTab(
                   key: ValueKey('chat-${widget.id}-private-tab'),
