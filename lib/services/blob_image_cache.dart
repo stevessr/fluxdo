@@ -15,6 +15,7 @@ import 'package:dio/dio.dart' show CancelToken;
 
 import 'dio_http_client.dart';
 import '../utils/image_format.dart';
+import '../utils/svg_utils.dart';
 
 /// Blob 图片缓存的磁盘使用统计。
 ///
@@ -938,24 +939,45 @@ class BlobImageProvider extends ImageProvider<BlobImageProvider> {
     StreamController<ImageChunkEvent> chunkEvents,
   ) async {
     try {
-      final bytes = await BlobImageCache.fetch(
-        key.bucket,
-        key.url,
-        cacheKey: key.cacheKey,
-        priority: key.priority,
-        fallbackUrl: key.fallbackUrl,
-        onProgress: (received, total) {
-          if (chunkEvents.isClosed) return;
-          chunkEvents.add(
-            ImageChunkEvent(
-              cumulativeBytesLoaded: received,
-              expectedTotalBytes: total,
-            ),
+      var refresh = false;
+      for (var attempt = 0; ; attempt++) {
+        Uint8List? bytes;
+        try {
+          bytes = await BlobImageCache.fetch(
+            key.bucket,
+            key.url,
+            cacheKey: key.cacheKey,
+            priority: key.priority,
+            fallbackUrl: key.fallbackUrl,
+            refresh: refresh,
+            onProgress: (received, total) {
+              if (chunkEvents.isClosed) return;
+              chunkEvents.add(
+                ImageChunkEvent(
+                  cumulativeBytesLoaded: received,
+                  expectedTotalBytes: total,
+                ),
+              );
+            },
           );
-        },
-      );
-      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-      return await decode(buffer);
+          final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+          return await decode(buffer);
+        } catch (error) {
+          final status = error is HttpStatusException ? error.statusCode : null;
+          if (key.bucket != BlobImageCache.avatarBucket ||
+              attempt >= 1 ||
+              (status != null &&
+                  status >= 400 &&
+                  status < 500 &&
+                  status != 408 &&
+                  status != 429) ||
+              (bytes != null && SvgUtils.isSvgBytes(bytes))) {
+            rethrow;
+          }
+          refresh = bytes != null;
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+        }
+      }
     } catch (e) {
       scheduleMicrotask(() {
         PaintingBinding.instance.imageCache.evict(key);
