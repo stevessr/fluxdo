@@ -74,6 +74,9 @@ jobs:
             lib/pages/chat/chat_thread_list_sheet.dart \
             lib/pages/chat/chat_thread_sheet.dart \
             lib/widgets/chat/chat_thread_preview_card.dart \
+            lib/widgets/chat/chat_surface.dart \
+            lib/widgets/chat/chat_conversation_tabs.dart \
+            test/pages/chat_message_bubble_layout_test.dart \
             test/pages/chat/chat_thread_activity_test.dart
       - name: Run chat regression tests
         run: dart tool/flutterw.dart test test/pages/chat/chat_thread_activity_test.dart test/pages/chat_message_bubble_layout_test.dart test/pages/chat_conversation_tabs_test.dart
