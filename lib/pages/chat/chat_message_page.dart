@@ -2289,9 +2289,10 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                 ? Icons.keyboard_rounded
                                 : Icons.sentiment_satisfied_alt_rounded,
                           ),
+                          isSelected: _showEmojiPicker,
                           color: _showEmojiPicker
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
+                              ? context.emphasis.selected
+                              : null,
                           tooltip: '表情与贴纸',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
@@ -2301,60 +2302,49 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           visualDensity: VisualDensity.compact,
                         ),
                         Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            focusNode: _inputFocusNode,
-                            textInputAction: TextInputAction.send,
-                            contentInsertionConfiguration:
-                                ContentInsertionConfiguration(
-                                  allowedMimeTypes: const [
-                                    'image/png',
-                                    'image/jpeg',
-                                    'image/gif',
-                                    'image/webp',
-                                    'image/avif',
-                                    'image/apng',
-                                    'image/bmp',
-                                    'image/heic',
-                                    'image/heif',
-                                  ],
-                                  onContentInserted: _handleImeContentInserted,
+                          child: InputFieldShell(
+                            radius: 20,
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: TextField(
+                              controller: _textController,
+                              focusNode: _inputFocusNode,
+                              textInputAction: TextInputAction.send,
+                              contentInsertionConfiguration:
+                                  ContentInsertionConfiguration(
+                                    allowedMimeTypes: const [
+                                      'image/png',
+                                      'image/jpeg',
+                                      'image/gif',
+                                      'image/webp',
+                                      'image/avif',
+                                      'image/apng',
+                                      'image/bmp',
+                                      'image/heic',
+                                      'image/heif',
+                                    ],
+                                    onContentInserted: _handleImeContentInserted,
+                                  ),
+                              maxLines: 5,
+                              minLines: 1,
+                              onTap: () {
+                                if (_showEmojiPicker) {
+                                  setState(() => _showEmojiPicker = false);
+                                }
+                              },
+                              onSubmitted: (_) => _sendMessageOrUpdate(),
+                              decoration: InputDecoration(
+                                hintText: context.l10n.chat_input_hint,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
                                 ),
-                            maxLines: 5,
-                            minLines: 1,
-                            onTap: () {
-                              if (_showEmojiPicker) {
-                                setState(() => _showEmojiPicker = false);
-                              }
-                            },
-                            onSubmitted: (_) => _sendMessageOrUpdate(),
-                            decoration: InputDecoration(
-                              hintText: context.l10n.chat_input_hint,
-                              border: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor:
-                                  theme.colorScheme.surfaceContainerHighest,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              isDense: true,
+                                isDense: true,
+                              ).withoutBorder(),
                             ),
                           ),
                         ),
                         const SizedBox(width: 4),
-                        IconButton(
+                        IconButton.filled(
                           onPressed: (_isSending || _isUploadingImage)
                               ? null
                               : _sendMessageOrUpdate,
@@ -2364,7 +2354,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                   height: 18,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: theme.colorScheme.onPrimaryContainer,
                                   ),
                                 )
                               : Icon(
@@ -2377,13 +2366,6 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                           constraints: const BoxConstraints.tightFor(
                             width: 40,
                             height: 40,
-                          ),
-                          style: IconButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primaryContainer,
-                            foregroundColor:
-                                theme.colorScheme.onPrimaryContainer,
-                            disabledBackgroundColor:
-                                theme.colorScheme.surfaceContainerHighest,
                           ),
                         ),
                       ],
