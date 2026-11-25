@@ -9,6 +9,7 @@ import '../../../services/draft_controller.dart';
 import '../../../services/local_draft_store.dart';
 import '../../../services/presence_service.dart';
 import '../../../widgets/common/emoji_text_editing_controller.dart';
+import '../../../widgets/markdown_editor/uploads/markdown_insertion_anchor.dart';
 
 /// 正在写的回复里有内容时，又要回复另一楼的处理选择
 enum ReplyTargetSwitch {
@@ -52,6 +53,8 @@ class TopicReplySession extends ChangeNotifier {
   /// 据此隐藏，避免面板从它身上长出来时下面还留着一个
   final ValueNotifier<bool> presentedNotifier = ValueNotifier<bool>(false);
   bool _submitting = false;
+  int _pendingImageUploads = 0;
+  late final _imageAnchors = MarkdownInsertionAnchors(text);
   bool _restoring = false;
   bool _disposed = false;
   DraftController? _draft;
@@ -63,6 +66,7 @@ class TopicReplySession extends ChangeNotifier {
 
   bool get active => activeNotifier.value;
   bool get submitting => _submitting;
+  bool get uploadingImage => _pendingImageUploads > 0;
   bool get hasContent => text.text.trim().isNotEmpty;
 
   /// 当前回复对象的草稿 key（底栏草稿预览按它读本地快照）
@@ -72,6 +76,7 @@ class TopicReplySession extends ChangeNotifier {
   /// 展开快捷回复（可指定回复对象）。已有内容且对象不同时按规则确认。
   Future<void> open({Post? target}) async {
     final sameTarget = target?.id == _target?.id;
+    if (uploadingImage && !sameTarget) return;
     if (_draft != null && !sameTarget) {
       if (hasContent) {
         final choice = await confirmSwitch(_target, target);
@@ -143,9 +148,30 @@ class TopicReplySession extends ChangeNotifier {
         );
   }
 
+  /// 在粘贴时记录插入点；上传期间仍可编辑正文，完成后按原位置插入。
+  Future<void> insertUploadedImage(Future<String> Function() upload) async {
+    if (_disposed || !active || submitting || handingOff) return;
+    final draft = _draft;
+    final anchor = _imageAnchors.capture();
+    _pendingImageUploads++;
+    notifyListeners();
+    try {
+      final markdown = await upload();
+      if (!_disposed && _draft == draft && !handingOff) {
+        _imageAnchors.insertBlock(anchor, markdown);
+      }
+    } finally {
+      if (!_disposed) {
+        _imageAnchors.release(anchor);
+        _pendingImageUploads--;
+        notifyListeners();
+      }
+    }
+  }
+
   /// 收起快捷回复；未发内容留作草稿
   void close() {
-    if (!active) return;
+    if (!active || uploadingImage) return;
     activeNotifier.value = false;
     focusNode.unfocus();
     _flushDraft();
@@ -206,7 +232,7 @@ class TopicReplySession extends ChangeNotifier {
     send,
   ) async {
     final content = text.text.trim();
-    if (_submitting || content.isEmpty) return;
+    if (_submitting || uploadingImage || content.isEmpty) return;
     _submitting = true;
     notifyListeners();
     try {
@@ -232,7 +258,7 @@ class TopicReplySession extends ChangeNotifier {
 
   /// 清除回复对象，改为回复话题（内容保留，不需要确认）
   void clearTarget() {
-    if (_target == null) return;
+    if (_target == null || uploadingImage) return;
     _retargetKeepingContent(null);
     notifyListeners();
   }
@@ -372,6 +398,7 @@ class TopicReplySession extends ChangeNotifier {
     _draft?.dispose();
     _leavePresence();
     _lifecycle?.dispose();
+    _imageAnchors.dispose();
     text.dispose();
     focusNode.dispose();
     activeNotifier.dispose();

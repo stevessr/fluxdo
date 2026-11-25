@@ -1,12 +1,58 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/pages/topic_detail_page/controllers/topic_reply_session.dart';
+import 'package:fluxdo/services/local_draft_store.dart';
 
 void main() {
   TextEditingValue at(String text, [int? offset]) => TextEditingValue(
     text: text,
     selection: TextSelection.collapsed(offset: offset ?? text.length),
   );
+
+  TopicReplySession activeSession() {
+    final session = TopicReplySession(
+      topicId: 1,
+      localStore: LocalDraftStore(),
+      confirmSwitch: (_, _) async => null,
+    );
+    session.activeNotifier.value = true;
+    addTearDown(session.dispose);
+    return session;
+  }
+
+  test('image upload tracks insertion point and blocks premature send', () async {
+    final session = activeSession();
+    session.text.value = at('before after', 6);
+    final upload = Completer<String>();
+    final pending = session.insertUploadedImage(() => upload.future);
+    expect(session.uploadingImage, isTrue);
+    var sent = false;
+    await session.submit((_, _, _) async {
+      sent = true;
+      return true;
+    });
+    expect(sent, isFalse);
+    session.close();
+    expect(session.active, isTrue);
+    session.text.value = at('Xbefore after', 13);
+    upload.complete('![image](upload://example.png)');
+    await pending;
+    expect(session.text.text, 'Xbefore\n![image](upload://example.png)\n after');
+    expect(session.uploadingImage, isFalse);
+  });
+
+  test('failed image upload releases sending guard without changing text', () async {
+    final session = activeSession();
+    session.text.value = at('draft');
+    await expectLater(
+      session.insertUploadedImage(() async => throw StateError('failed')),
+      throwsStateError,
+    );
+    expect(session.uploadingImage, isFalse);
+    expect(session.text.text, 'draft');
+  });
 
   const quote = '[quote="a, post:2, topic:1"]\nhi\n[/quote]';
 

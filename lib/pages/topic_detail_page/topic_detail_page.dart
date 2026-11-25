@@ -2573,7 +2573,7 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
   /// 是面板自己长成了编辑器。交接期间快捷回复的输入框保持焦点,完整
   /// 编辑器挂载后直接接过焦点,键盘不会先收起再弹出
   Future<void> _expandQuickReply(QuickReplyExpansion from) async {
-    if (_replySession.handingOff) {
+    if (_replySession.handingOff || _replySession.uploadingImage) {
       from.snapshot?.dispose();
       return;
     }

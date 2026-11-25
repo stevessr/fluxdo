@@ -1,12 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:common_ui/common_ui.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
 
 import '../../../l10n/s.dart';
+import '../../../services/app_error_handler.dart';
+import '../../../services/discourse/discourse_service.dart';
+import '../../../widgets/content/discourse_html_content/image_utils.dart';
+import '../../../widgets/markdown_editor/uploads/upload_task_labels.dart';
 import '../../../utils/emoji_shortcodes.dart';
 import '../../../utils/markdown_block_format.dart';
 import '../../../widgets/common/app_bottom_sheet.dart';
@@ -26,7 +34,7 @@ import 'topic_bottom_bar.dart';
 ///
 /// 面板从底栏的回复入口胶囊原地「长」出来（外形、圆角、底色连续变形），
 /// 收起时缩回胶囊；展开到完整编辑器时由完整编辑器从面板当前外形继续长大，
-/// 整个过程一镜到底。只承载纯文本与表情，其余交给完整编辑器。
+/// 整个过程一镜到底。承载纯文本、表情与输入法粘贴的图片，其余交给完整编辑器。
 class TopicQuickReplyLayer extends StatefulWidget {
   const TopicQuickReplyLayer({
     super.key,
@@ -292,12 +300,58 @@ class _TopicQuickReplyLayerState extends State<TopicQuickReplyLayer>
     recordRecentEmoji(name);
   }
 
-  /// 守卫与发送按钮一致：有内容且不在发送中
+  /// 接收 Gboard 等输入法通过 Android commitContent 传来的图片。
+  Future<void> _handleContentInserted(KeyboardInsertedContent content) async {
+    final data = content.data;
+    if (!content.hasData || data == null || data.isEmpty) return;
+    final ext = switch (content.mimeType) {
+      'image/png' => 'png',
+      'image/jpeg' => 'jpg',
+      'image/gif' => 'gif',
+      'image/webp' => 'webp',
+      _ => null,
+    };
+    if (ext == null) return;
+    try {
+      await _session.insertUploadedImage(() async {
+        final cache = await getTemporaryDirectory();
+        final directory = await cache.createTemp('quick_reply_');
+        try {
+          final name = 'ime_paste_${DateTime.now().microsecondsSinceEpoch}.$ext';
+          final file = File('${directory.path}/$name');
+          await file.writeAsBytes(data);
+          final result = await DiscourseService().uploadImage(file.path);
+          final url = result.url;
+          if (url != null) {
+            DiscourseImageUtils.seedUploadUrl(result.shortUrl, url);
+          }
+          return result.toMarkdown(alt: name);
+        } finally {
+          try {
+            await directory.delete(recursive: true);
+          } on FileSystemException catch (_) {
+            // 临时目录清理失败不影响已经完成的上传。
+          }
+        }
+      });
+    } on DioException catch (_) {
+      // 网络错误由 ErrorInterceptor 统一提示。
+    } catch (error, stackTrace) {
+      AppErrorHandler.handleUnexpected(error, stackTrace);
+    }
+  }
+
+  /// 守卫与发送按钮一致：有内容且不在发送或上传中。
   void _submitFromShortcut() {
-    if (_session.hasContent && !_session.submitting) widget.onSend();
+    if (_session.hasContent &&
+        !_session.submitting &&
+        !_session.uploadingImage) {
+      widget.onSend();
+    }
   }
 
   void _expand() {
+    if (_session.uploadingImage || _session.handingOff) return;
     final boundary =
         _snapshotKey.currentContext?.findRenderObject()
             as RenderRepaintBoundary?;
@@ -466,7 +520,9 @@ class _TopicQuickReplyLayerState extends State<TopicQuickReplyLayer>
       listenable: _session,
       builder: (context, _) {
         final target = _session.target;
-        final canSend = _session.hasContent && !_session.submitting;
+        final uploadingImage = _session.uploadingImage;
+        final canSend =
+            _session.hasContent && !_session.submitting && !uploadingImage;
         final suggestExpand =
             widget.richEditorAvailable &&
             markdownHasBlockFormatting(_session.text.text);
@@ -508,7 +564,7 @@ class _TopicQuickReplyLayerState extends State<TopicQuickReplyLayer>
                       ),
                     ),
                     IconButton(
-                      onPressed: _session.clearTarget,
+                      onPressed: uploadingImage ? null : _session.clearTarget,
                       tooltip: l10n.common_cancel,
                       visualDensity: VisualDensity.compact,
                       iconSize: 16,
@@ -535,6 +591,15 @@ class _TopicQuickReplyLayerState extends State<TopicQuickReplyLayer>
                   maxLines: 8,
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
+                  contentInsertionConfiguration: ContentInsertionConfiguration(
+                    allowedMimeTypes: const [
+                      'image/png',
+                      'image/jpeg',
+                      'image/gif',
+                      'image/webp',
+                    ],
+                    onContentInserted: _handleContentInserted,
+                  ),
                   // 退格删到表情时整个短代码一起删（与 Boost、聊天输入一致）
                   inputFormatters: const [EmojiShortcodeDeleteFormatter()],
                   style: theme.textTheme.bodyLarge,
@@ -577,12 +642,12 @@ class _TopicQuickReplyLayerState extends State<TopicQuickReplyLayer>
                   // 内容含格式时突出展开按钮
                   suggestExpand
                       ? IconButton.filledTonal(
-                          onPressed: _expand,
+                          onPressed: uploadingImage ? null : _expand,
                           tooltip: l10n.topicDetail_quickReplyExpand,
                           icon: const Icon(Symbols.open_in_full_rounded),
                         )
                       : IconButton(
-                          onPressed: _expand,
+                          onPressed: uploadingImage ? null : _expand,
                           tooltip: l10n.topicDetail_quickReplyExpand,
                           icon: const Icon(Symbols.open_in_full_rounded),
                           color: theme.colorScheme.onSurfaceVariant,
@@ -599,6 +664,17 @@ class _TopicQuickReplyLayerState extends State<TopicQuickReplyLayer>
                       ),
                     ),
                   ),
+                  if (uploadingImage)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Tooltip(
+                        message: UploadTaskLabels.of(context).uploading,
+                        child: const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
                   FilledButton(
                     onPressed: canSend ? widget.onSend : null,
                     style: FilledButton.styleFrom(
