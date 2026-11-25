@@ -43,6 +43,24 @@ class ChatSurface {
     );
   }
 
+  static Color sendForeground(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return context.themeStyle.controls == ControlStyle.ink
+        ? scheme.surface
+        : scheme.onPrimary;
+  }
+
+  static ButtonStyle sendStyle(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final ink = context.themeStyle.controls == ControlStyle.ink;
+    return IconButton.styleFrom(
+      backgroundColor: ink ? scheme.onSurface : scheme.primary,
+      foregroundColor: sendForeground(context),
+      disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12),
+      disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.38),
+    );
+  }
+
   static ShapeBorder previewShape(BuildContext context) =>
       RoundedSuperellipseBorder(
         borderRadius: context.shapes.borderRadius(16),
