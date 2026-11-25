@@ -7,6 +7,7 @@ import '../../models/chat/chat_models.dart';
 import '../../utils/time_utils.dart';
 import '../common/emoji_text.dart';
 import '../common/smart_avatar.dart';
+import 'chat_surface.dart';
 
 /// Discourse excerpts may contain cooked emoji images rather than shortcodes.
 String chatThreadPreviewText(String value) {
@@ -137,11 +138,9 @@ class ChatThreadReplyCard extends StatelessWidget {
     }
     final avatars = participants.values.take(3).toList();
     return Material(
-      color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedSuperellipseBorder(
-        borderRadius: context.shapes.borderRadius(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
+      color: ChatSurface.incomingColor(context),
+      shape: ChatSurface.previewShape(context),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         customBorder: RoundedSuperellipseBorder(
