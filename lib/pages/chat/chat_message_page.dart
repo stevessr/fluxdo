@@ -2346,6 +2346,7 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                         ),
                         const SizedBox(width: 4),
                         IconButton.filled(
+                          style: ChatSurface.sendStyle(context),
                           onPressed: (_isSending || _isUploadingImage)
                               ? null
                               : _sendMessageOrUpdate,
