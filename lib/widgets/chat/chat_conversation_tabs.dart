@@ -1,5 +1,7 @@
 import 'package:common_ui/common_ui.dart' show UiShapesContext;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../theme/theme_style.dart';
 
 import '../../l10n/s.dart';
 
@@ -99,13 +101,14 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
   Widget build(BuildContext context) {
     super.build(context);
     final theme = Theme.of(context);
+    final pill = context.themeStyle.navIndicator == NavIndicatorStyle.pill;
 
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Material(
-            color: theme.colorScheme.surfaceContainerLow,
+            color: pill ? theme.colorScheme.surfaceContainerLow : Colors.transparent,
             borderRadius: context.shapes.borderRadius(12),
             clipBehavior: Clip.antiAlias,
             child: TabBar(
@@ -113,12 +116,7 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
               controller: _controller,
               dividerHeight: 0,
               indicatorSize: TabBarIndicatorSize.tab,
-              indicator: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer,
-                borderRadius: context.shapes.borderRadius(10),
-              ),
-              labelColor: theme.colorScheme.onSecondaryContainer,
-              unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+              // 继承应用 TabBarTheme 的胶囊、短横或浅灰指示器。
               tabs: [
                 _buildTab(
                   key: ValueKey('chat-${widget.id}-private-tab'),
