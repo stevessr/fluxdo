@@ -41,6 +41,7 @@ import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
 import '../../widgets/common/emoji_text.dart';
 import '../../widgets/chat/chat_thread_preview_card.dart';
+import '../../widgets/chat/chat_surface.dart';
 import '../../widgets/common/error_view.dart';
 import '../../widgets/common/smart_avatar.dart';
 import '../../widgets/chat/online_status_avatar.dart';
@@ -3306,20 +3307,9 @@ class _ChatMessageBubbleState extends State<_ChatMessageBubble> {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        decoration: BoxDecoration(
-                          color: isOwnMessage
-                              ? theme.colorScheme.primaryContainer
-                              : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: context.shapes
-                              .borderRadius(16)
-                              .copyWith(
-                                bottomLeft: isOwnMessage
-                                    ? context.shapes.radius(16)
-                                    : context.shapes.radius(4),
-                                bottomRight: isOwnMessage
-                                    ? context.shapes.radius(4)
-                                    : context.shapes.radius(16),
-                              ),
+                        decoration: ChatSurface.bubble(
+                          context,
+                          isOwn: isOwnMessage,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
