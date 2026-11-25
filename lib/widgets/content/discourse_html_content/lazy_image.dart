@@ -134,6 +134,9 @@ class _LazyImageState extends State<LazyImage> {
   bool _fallbackScheduled = false;
   int _imageGeneration = 0;
 
+  // 同一挂载图片使用稳定解码宽度；窗口/列宽变化仅更新布局。
+  int? _decodePixelWidth;
+
   String? get _activeKey => switch (_sourceIndex) {
     1 => widget.fallbackCacheKey,
     2 => widget.originalCacheKey,
@@ -203,6 +206,7 @@ class _LazyImageState extends State<LazyImage> {
         oldWidget.originalCacheKey != widget.originalCacheKey;
     if (changed) {
       _imageGeneration++;
+      _decodePixelWidth = null;
       _sourceIndex = 0;
       _syncPaintNoted = false;
       _fallbackScheduled = false;
@@ -235,7 +239,9 @@ class _LazyImageState extends State<LazyImage> {
   /// ImageCache 条目,不产生第二次解码),记入比例记忆。仅无声明尺寸
   /// 的图需要;拿到首帧即移除监听。经 ScrollAware 包装,快滚中不首发。
   void _resolveRatioIfNeeded() {
-    if (_hasFixedBox || _ratioListener != null) return;
+    if (_hasFixedBox || _ratioListener != null || _resolvedRatio != null) {
+      return;
+    }
 
     final stream = ScrollAwareImageProvider(
       context: _scrollAwareContext,
@@ -309,7 +315,8 @@ class _LazyImageState extends State<LazyImage> {
       1.0,
       screenW,
     );
-    final cacheWidth = (logicalWidth * dpr).round().clamp(1, 1 << 16);
+    final cacheWidth = _decodePixelWidth ??=
+        (logicalWidth * dpr).round().clamp(1, 1 << 16);
     final provider = ResizeImage(
       _activeImage,
       width: cacheWidth,

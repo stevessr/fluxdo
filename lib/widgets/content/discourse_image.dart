@@ -62,6 +62,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
   bool _isLoading = true;
   bool _hasError = false;
   int _resolveGeneration = 0;
+  ImageProvider? _cachedProvider;
 
   @override
   void initState() {
@@ -73,6 +74,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
   void didUpdateWidget(DiscourseImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url) {
+      _cachedProvider = null;
       _resolveUrl();
     }
   }
@@ -204,7 +206,7 @@ class _DiscourseImageState extends State<DiscourseImage> {
       key: ValueKey(_resolvedUrl),
       image: ImageDecodeSpecMemo.remember(
         _resolvedUrl!,
-        sharedImageProvider(
+        _cachedProvider ??= sharedImageProvider(
           _resolvedUrl!,
           cacheWidth: cacheWidth,
           cacheHeight: cacheHeight,

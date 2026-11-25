@@ -148,6 +148,30 @@ void main() {
     ]);
   }
 
+  testWidgets('原图查看器窗口缩放不更换解码流', (tester) async {
+    const url = 'https://example.test/resize-original.png';
+    await openViewer(
+      tester,
+      open: (context) async {
+        await cacheGallery(tester, context, [url]);
+        if (!context.mounted) return;
+        ImageViewerPage.open(context, url);
+      },
+    );
+    final finder = find.byType(GestureImageView);
+    final original = tester.widget<GestureImageView>(finder);
+    for (final size in [const Size(1200, 800), const Size(600, 400)]) {
+      tester.view.physicalSize = size;
+      await tester.pump();
+      final current = tester.widget<GestureImageView>(finder);
+      expect(current.image, same(original.image));
+      expect(current.controller, same(original.controller));
+      expect(tester.takeException(), isNull);
+    }
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('普通查看后点关闭，不重新切换系统栏模式', (tester) async {
     await openViewer(tester);
     await tester.tap(find.byIcon(Symbols.close_rounded));

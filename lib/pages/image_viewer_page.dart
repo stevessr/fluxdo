@@ -476,24 +476,33 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
   /// 解码这类图会产生 100ms+ 的同步纹理上传,独占 raster 线程期间全 app
   /// 掉帧(诊断实测单帧 raster 148ms、后续帧排队 300ms)。maxScale 4.0
   /// 的放大浏览下该上限内清晰度无感知差异。
+  // 同一次查看会话固定解码规格；窗口 resize 只改变绘制布局，
+  // 不更换 ResizeImageKey，也不打断当前原图或相邻预解码。
+  int? _viewerDecodeExtent;
+  final Map<(String, DownloadPriority), ResizeImage> _viewerProviders = {};
+
   ResizeImage _clampedViewerProvider(
     String url, {
     DownloadPriority priority = DownloadPriority.high,
   }) {
-    final view = View.of(context);
-    final longestPx = (view.physicalSize.longestSide * 3)
-        .clamp(2048.0, 8192.0)
-        .round();
-    return ResizeImage(
-      discourseImageProvider(
-        url,
-        bucket: BlobImageCache.originalBucket,
-        // 用户主动点开的大图,插到所有预建/预取前面
-        priority: priority,
+    final longestPx = _viewerDecodeExtent ??= (View.of(context)
+                .physicalSize
+                .longestSide * 3)
+            .clamp(2048.0, 8192.0)
+            .round();
+    return _viewerProviders.putIfAbsent(
+      (url, priority),
+      () => ResizeImage(
+        discourseImageProvider(
+          url,
+          bucket: BlobImageCache.originalBucket,
+          // 用户主动点开的大图,插到所有预建/预取前面
+          priority: priority,
+        ),
+        width: longestPx,
+        height: longestPx,
+        policy: ResizeImagePolicy.fit,
       ),
-      width: longestPx,
-      height: longestPx,
-      policy: ResizeImagePolicy.fit,
     );
   }
 

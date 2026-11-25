@@ -15,8 +15,63 @@ import 'package:fluxdo_render/fluxdo_render.dart';
 import 'package:fluxdo/services/image_decode_spec_memo.dart';
 import 'package:fluxdo/widgets/common/hero_image.dart';
 import 'package:fluxdo/widgets/content/discourse_image.dart';
+import 'package:fluxdo/widgets/content/discourse_html_content/lazy_image.dart';
 
 void main() {
+  for (final lazy in [false, true]) {
+    testWidgets('窗口缩放保留已加载图片: lazy=$lazy', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(400, 800);
+      addTearDown(tester.view.reset);
+      final url = 'https://test.invalid/resize-$lazy.png';
+      final source = discourseImageProvider(url);
+      final expected = ResizeImage(
+        source,
+        width: 400,
+        height: 4096,
+        policy: ResizeImagePolicy.fit,
+      );
+      final key = await expected.obtainKey(ImageConfiguration.empty);
+      final pixels = (await tester.runAsync(
+        () => createTestImage(width: 80, height: 60, cache: false),
+      ))!;
+      tester.binding.imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(
+          Future.value(ImageInfo(image: pixels)),
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: lazy
+                ? LazyImage(imageProvider: source, heroTag: 'resize-$lazy')
+                : DiscourseImage(url: url),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final finder = find.byType(Image);
+      final initial = tester.widget<Image>(finder).image;
+      final raw = find.descendant(
+        of: finder,
+        matching: find.byType(RawImage),
+      );
+      expect(tester.widget<RawImage>(raw).image, isNotNull);
+      for (final size in [const Size(700, 500), const Size(300, 600)]) {
+        tester.view.physicalSize = size;
+        await tester.pump();
+        final current = tester.widget<Image>(finder).image;
+        expect(await current.obtainKey(ImageConfiguration.empty), key);
+        expect(current, initial);
+        expect(tester.widget<RawImage>(raw).image, isNotNull);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      tester.binding.imageCache.evict(key);
+    });
+  }
+
   testWidgets('普通图片的 Hero 和查看器记录使用屏上图片的实际 provider', (tester) async {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetDevicePixelRatio);
