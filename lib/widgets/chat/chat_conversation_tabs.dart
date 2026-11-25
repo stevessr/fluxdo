@@ -115,8 +115,16 @@ class _ChatConversationTabsState extends State<ChatConversationTabs>
               key: ValueKey('chat-${widget.id}-subtabs'),
               controller: _controller,
               dividerHeight: 0,
-              indicatorSize: TabBarIndicatorSize.tab,
-              // 继承应用 TabBarTheme 的胶囊、短横或浅灰指示器。
+              indicatorSize: pill ? TabBarIndicatorSize.tab : null,
+              // 胶囊沿用二级分类布局，其余风格继承应用 TabBarTheme。
+              indicator: pill
+                  ? BoxDecoration(
+                      color: theme.colorScheme.secondaryContainer,
+                      borderRadius: context.shapes.borderRadius(10),
+                    )
+                  : null,
+              labelColor: pill ? theme.colorScheme.onSecondaryContainer : null,
+              unselectedLabelColor: pill ? theme.colorScheme.onSurfaceVariant : null,
               tabs: [
                 _buildTab(
                   key: ValueKey('chat-${widget.id}-private-tab'),
