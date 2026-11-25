@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../services/discourse_cache_manager.dart';
+import '../../services/dio_http_client.dart' show HttpStatusException;
 import '../../services/emoji_handler.dart';
 import '../../services/svg_image_cache.dart';
 import '../../utils/relative_time_clock.dart';
@@ -363,6 +364,20 @@ class _RenderTopicCard extends RenderBox
         canvas.restore();
       } else {
         canvas.drawOval(avatarRect, Paint()..color = const Color(0x14888888));
+        if (l.avatarUrl == null || TopicCardImages.isCoolingDown(l.avatarUrl!)) {
+          final center = avatarRect.center;
+          final side = avatarRect.shortestSide;
+          final paint = Paint()..color = const Color(0x88888888);
+          canvas.drawCircle(center.translate(0, -side * 0.13), side * 0.11, paint);
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: center.translate(0, side * 0.16),
+              width: side * 0.44,
+              height: side * 0.24,
+            ),
+            paint,
+          );
+        }
       }
     }
 
@@ -441,6 +456,27 @@ class TopicCardImages {
   static final Map<String, ui.Image> _images = {};
   static final Map<String, Set<RenderObject>> _waiters = {};
   static const int _cap = 400;
+  static final _failedUntil = <String, DateTime>{};
+  static const _retryDelays = [
+    Duration(milliseconds: 350),
+    Duration(seconds: 1),
+  ];
+
+  static bool isCoolingDown(String url) {
+    final until = _failedUntil[url];
+    if (until == null) return false;
+    if (DateTime.now().isBefore(until)) return true;
+    _failedUntil.remove(url);
+    return false;
+  }
+
+  static void _recordFailure(String url) {
+    _failedUntil.remove(url);
+    _failedUntil[url] = DateTime.now().add(const Duration(seconds: 15));
+    if (_failedUntil.length > _cap) {
+      _failedUntil.remove(_failedUntil.keys.first);
+    }
+  }
 
   // 只有真正 paint 的卡片保留前台优先权。预热不提权；卡片离开、
   // 复用或下载结束时释放，多视图共享同一头像时分别计数。
@@ -469,8 +505,12 @@ class TopicCardImages {
     RenderObject requester, {
     String bucket = BlobImageCache.avatarBucket,
   }) {
-    final hit = _images[url];
-    if (hit != null) return hit;
+    final hit = _images.remove(url);
+    if (hit != null) {
+      _images[url] = hit;
+      return hit;
+    }
+    if (isCoolingDown(url)) return null;
     _retainForeground(url, bucket, requester);
     final waiters = _waiters[url];
     if (waiters != null) {
@@ -489,51 +529,83 @@ class TopicCardImages {
     String url, {
     String bucket = BlobImageCache.avatarBucket,
   }) {
-    if (_images.containsKey(url) || _waiters.containsKey(url)) return;
+    if (_images.containsKey(url) ||
+        _waiters.containsKey(url) ||
+        isCoolingDown(url)) {
+      return;
+    }
     _waiters[url] = {};
     unawaited(_load(url, bucket));
   }
 
   static Future<void> _load(String url, String bucket) async {
+    var refresh = false;
     try {
-      final bytes = await BlobImageCache.fetch(
-        bucket,
-        url,
-        // 与 emojiImageProvider 同一回退:展示表情集缺图取站点表情集
-        fallbackUrl: bucket == BlobImageCache.emojiBucket
-            ? EmojiHandler.fallbackUrl(url)
-            : null,
-      );
-      if (bytes.isEmpty) return;
-      // SVG 头像(含伪装成 PNG 的)位图解码器解不了,按内容嗅探后光栅化,
-      // 与 SmartAvatar 同一判断
-      if (SvgUtils.isSvgBytes(bytes)) {
-        final image = await _rasterizeSvg(bytes);
-        if (image != null) _store(url, image);
-        return;
-      }
-      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-      // 头像显示 32dp、emoji ~19dp;96px 解码对两者都双倍富余
-      final codec = await PaintingBinding.instance
-          .instantiateImageCodecWithSize(
-            buffer,
-            getTargetSize: (w, h) {
-              if (w <= 96 && h <= 96) {
-                return ui.TargetImageSize(width: w, height: h);
-              }
-              final ratio = 96 / (w > h ? w : h);
-              return ui.TargetImageSize(
-                width: (w * ratio).round(),
-                height: (h * ratio).round(),
-              );
-            },
+      for (var attempt = 0; ; attempt++) {
+        var receivedBytes = false;
+        try {
+          final bytes = await BlobImageCache.fetch(
+            bucket,
+            url,
+            refresh: refresh,
+            fallbackUrl: bucket == BlobImageCache.emojiBucket
+                ? EmojiHandler.fallbackUrl(url)
+                : null,
           );
-      final frame = await codec.getNextFrame();
-      codec.dispose();
-      _store(url, frame.image);
-    } catch (_) {
-      // 失败不重试本会话(fallback 占位继续显示);滚动重访会因 waiters
-      // 已清除而重新尝试
+          receivedBytes = true;
+          if (bytes.isEmpty) throw StateError('Empty image');
+          if (SvgUtils.isSvgBytes(bytes)) {
+            final image = await _rasterizeSvg(bytes);
+            if (image == null) throw StateError('Empty SVG viewport');
+            _store(url, image);
+          } else {
+            final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+            final codec = await PaintingBinding.instance
+                .instantiateImageCodecWithSize(
+                  buffer,
+                  getTargetSize: (w, h) {
+                    if (w <= 96 && h <= 96) {
+                      return ui.TargetImageSize(width: w, height: h);
+                    }
+                    final ratio = 96 / (w > h ? w : h);
+                    return ui.TargetImageSize(
+                      width: math.max(1, (w * ratio).round()),
+                      height: math.max(1, (h * ratio).round()),
+                    );
+                  },
+                );
+            try {
+              final frame = await codec.getNextFrame();
+              _store(url, frame.image);
+            } finally {
+              codec.dispose();
+            }
+          }
+          _failedUntil.remove(url);
+          break;
+        } catch (error) {
+          final status = error is HttpStatusException ? error.statusCode : null;
+          final permanent = status != null &&
+              status >= 400 &&
+              status < 500 &&
+              status != 408 &&
+              status != 429;
+          final visible = _waiters[url]?.isNotEmpty ?? false;
+          if (bucket != BlobImageCache.avatarBucket ||
+              permanent ||
+              !visible ||
+              attempt >= _retryDelays.length) {
+            // Prewarm failures must not suppress a subsequent visible load.
+            if (visible) _recordFailure(url);
+            break;
+          }
+          // Network failures can retry the normal cache path; a decoder
+          // failure must bypass the same bad bytes on the next attempt.
+          refresh = refresh || receivedBytes;
+          await Future<void>.delayed(_retryDelays[attempt]);
+          if (_waiters[url]?.isEmpty ?? true) break;
+        }
+      }
     } finally {
       final waiters = _waiters.remove(url);
       if (waiters != null) {
@@ -541,7 +613,8 @@ class TopicCardImages {
           final leases = _foreground[r];
           leases?.remove(url)?.call();
           if (leases != null && leases.isEmpty) _foreground.remove(r);
-          if (_images.containsKey(url) && r.attached) r.markNeedsPaint();
+          // Also repaint a terminal failure to replace the loading state.
+          if (r.attached) r.markNeedsPaint();
         }
       }
     }
@@ -560,7 +633,9 @@ class TopicCardImages {
   /// 裁切方式与 SmartAvatar 的 BoxFit.cover 一致
   static Future<ui.Image?> _rasterizeSvg(List<int> bytes) async {
     final si = await SvgImageCache.load(
-      SvgUtils.sanitize(SvgUtils.decodeSvgBytes(bytes)),
+      SvgUtils.sanitize(
+        SvgUtils.stripActiveContent(SvgUtils.decodeSvgBytes(bytes)),
+      ),
     );
     await si.prepareImages();
     try {
