@@ -2323,7 +2323,8 @@ class _ChatMessagePageState extends ConsumerState<ChatMessagePage> {
                                       'image/heic',
                                       'image/heif',
                                     ],
-                                    onContentInserted: _handleImeContentInserted,
+                                    onContentInserted:
+                                        _handleImeContentInserted,
                                   ),
                               maxLines: 5,
                               minLines: 1,
