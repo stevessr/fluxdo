@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute, UiEmphasis;
+import 'package:common_ui/common_ui.dart' show UiShapesContext, InteractionPageRoute, UiEmphasis, UiEmphasisContext, InputFieldShell, InputDecorationWithoutBorder;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1136,24 +1136,51 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // 图片附件上传按钮
-                        IconButton(
-                          tooltip: '上传图片',
-                          onPressed: _isUploadingImage
-                              ? null
-                              : _pickAndUploadImage,
-                          icon: const Icon(Icons.add_photo_alternate_rounded),
-                        ),
-                        IconButton(
-                          tooltip: '长图上传',
-                          onPressed: _isUploadingImage
-                              ? null
-                              : _pickAndUploadLongImage,
-                          icon: const Icon(Icons.content_cut_rounded),
+                        // 与频道输入栏统一，给窄屏正文留出空间。
+                        SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: PopupMenuButton<String>(
+                            tooltip: '添加内容',
+                            padding: EdgeInsets.zero,
+                            enabled: !_isUploadingImage,
+                            icon: const Icon(Icons.add_rounded),
+                            onSelected: (value) {
+                              if (value == 'image') {
+                                _pickAndUploadImage();
+                              } else {
+                                _pickAndUploadLongImage();
+                              }
+                            },
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'image',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.add_photo_alternate_rounded),
+                                  title: Text('上传图片'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'long_image',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.content_cut_rounded),
+                                  title: Text('长图上传'),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         // 表情按钮
                         IconButton(
                           tooltip: '表情',
+                          isSelected: _showEmojiPicker,
+                          color: _showEmojiPicker ? context.emphasis.selected : null,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                           onPressed: () {
                             setState(
                               () => _showEmojiPicker = !_showEmojiPicker,
@@ -1172,60 +1199,51 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            focusNode: _inputFocusNode,
-                            minLines: 1,
-                            maxLines: 4,
-                            textInputAction: TextInputAction.send,
-                            contentInsertionConfiguration:
-                                ContentInsertionConfiguration(
-                                  allowedMimeTypes: const [
-                                    'image/png',
-                                    'image/jpeg',
-                                    'image/gif',
-                                    'image/webp',
-                                    'image/avif',
-                                    'image/apng',
-                                    'image/bmp',
-                                    'image/heic',
-                                    'image/heif',
-                                  ],
-                                  onContentInserted: _handleImeContentInserted,
+                          child: InputFieldShell(
+                            radius: 20,
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: TextField(
+                              controller: _textController,
+                              focusNode: _inputFocusNode,
+                              minLines: 1,
+                              maxLines: 4,
+                              textInputAction: TextInputAction.send,
+                              contentInsertionConfiguration:
+                                  ContentInsertionConfiguration(
+                                    allowedMimeTypes: const [
+                                      'image/png',
+                                      'image/jpeg',
+                                      'image/gif',
+                                      'image/webp',
+                                      'image/avif',
+                                      'image/apng',
+                                      'image/bmp',
+                                      'image/heic',
+                                      'image/heif',
+                                    ],
+                                    onContentInserted: _handleImeContentInserted,
+                                  ),
+                              onSubmitted: (_) => _send(),
+                              onTap: () {
+                                if (_showEmojiPicker) {
+                                  setState(() => _showEmojiPicker = false);
+                                }
+                              },
+                              decoration: InputDecoration(
+                                hintText: composerHint,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
                                 ),
-                            onSubmitted: (_) => _send(),
-                            onTap: () {
-                              if (_showEmojiPicker) {
-                                setState(() => _showEmojiPicker = false);
-                              }
-                            },
-                            decoration: InputDecoration(
-                              hintText: composerHint,
-                              border: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: context.shapes.borderRadius(20),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor:
-                                  theme.colorScheme.surfaceContainerHighest,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
+                              ).withoutBorder(),
                             ),
                           ),
                         ),
                         const SizedBox(width: 4),
                         IconButton.filled(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                           onPressed: (_isSending || _isUploadingImage)
                               ? null
                               : _send,
