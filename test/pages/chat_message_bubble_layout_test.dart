@@ -10,9 +10,12 @@
 /// （该类是私有的），覆盖主项目 callbacks 注入的真实 builder。
 library;
 
-import 'package:flutter/material.dart';
+import 'package:common_ui/common_ui.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/utils/fluxdo_render_callbacks.dart';
+import 'package:fluxdo/theme/theme_style.dart';
+import 'package:fluxdo/widgets/chat/chat_surface.dart';
 
 const double _screenWidth = 400;
 const double _maxBubbleWidth = _screenWidth * 0.75;
@@ -45,10 +48,7 @@ Widget bubble(String cooked) {
                             horizontal: 12,
                             vertical: 8,
                           ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                          decoration: ChatSurface.bubble(context, isOwn: false),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -105,6 +105,50 @@ Future<(Size?, Object?)> render(WidgetTester tester, String cooked) async {
 }
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final surface in SurfaceStyle.values) {
+      testWidgets('聊天表面跟随 ${brightness.name} / ${surface.name}', (tester) async {
+        final scheme = ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: brightness,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(
+              colorScheme: scheme,
+              extensions: [
+                ThemeStyle(surfaces: surface),
+                const UiShapes(max: 2),
+              ],
+            ),
+            home: Builder(
+              builder: (context) {
+                final incoming = ChatSurface.bubble(context, isOwn: false);
+                final outgoing = ChatSurface.bubble(context, isOwn: true);
+                final original = ChatSurface.bubble(
+                  context,
+                  isOwn: false,
+                  isOriginal: true,
+                );
+                expect(outgoing.color, scheme.primaryContainer);
+                expect(incoming.color, switch (surface) {
+                  SurfaceStyle.filled => scheme.surfaceContainerHighest,
+                  SurfaceStyle.outlined => scheme.surface,
+                  SurfaceStyle.flat => scheme.surfaceContainerLow,
+                  SurfaceStyle.raised => raisedSurfaceColor(scheme),
+                });
+                expect(incoming.border != null, surface.hasOutline);
+                expect(original.border, isNotNull);
+                expect(incoming.borderRadius, BorderRadius.circular(2));
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+      });
+    }
+  }
+
   // 覆盖 Discourse chat cooked 的典型形态；图片 / onebox 走主项目 builder
   // （内部含 LayoutBuilder），是原崩溃链路里最脆的一环。
   const cases = <String, String>{
