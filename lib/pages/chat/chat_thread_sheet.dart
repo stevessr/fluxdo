@@ -1243,6 +1243,7 @@ class _ChatThreadSheetState extends ConsumerState<ChatThreadSheet> {
                         ),
                         const SizedBox(width: 4),
                         IconButton.filled(
+                          style: ChatSurface.sendStyle(context),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                           onPressed: (_isSending || _isUploadingImage)
