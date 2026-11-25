@@ -365,10 +365,15 @@ class BlobImageCache {
     void Function(int received, int? total)? onProgress,
     CancelToken? cancellation,
     String? fallbackUrl,
+    bool refresh = false,
   }) async {
     final key = cacheKey ?? url;
-    final cached = await read(bucket, key, url: url);
-    if (cached != null) return cached;
+    // A decoder can request a fresh copy of a corrupt payload without
+    // deleting shared references or changing the URL's download identity.
+    if (!refresh) {
+      final cached = await read(bucket, key, url: url);
+      if (cached != null) return cached;
+    }
 
     Future<Uint8List> download(String sourceUrl) async {
       if (cancellation?.isCancelled ?? false) throw cancellation!.cancelError!;
