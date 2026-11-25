@@ -548,43 +548,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
           // 频道搜索。创建私信/群聊入口统一收进右上角频道列表选项。
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: context.l10n.chat_search_channels,
-                prefixIcon: const Icon(Symbols.search_rounded, size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Symbols.close_rounded, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                filled: true,
-                fillColor: theme.colorScheme.surfaceContainerHigh,
-                border: OutlineInputBorder(
-                  borderRadius: context.shapes.borderRadius(12),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: context.shapes.borderRadius(12),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: context.shapes.borderRadius(12),
-                  borderSide: BorderSide.none,
-                ),
+            child: InputFieldShell(
+              radius: 16,
+              color: theme.colorScheme.surfaceContainerHigh,
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: context.l10n.chat_search_channels,
+                  prefixIcon: const Icon(Symbols.search_rounded, size: 20),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Symbols.close_rounded, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ).withoutBorder(),
+                onChanged: (val) {
+                  setState(() => _searchQuery = val.trim());
+                },
               ),
-              onChanged: (val) {
-                setState(() => _searchQuery = val.trim());
-              },
             ),
           ),
           Expanded(
@@ -940,7 +930,7 @@ class ChatChannelTile extends ConsumerWidget {
       return CircleAvatar(
         radius: 22,
         backgroundColor: theme.colorScheme.primaryContainer,
-        child: EmojiText(emojiCode, style: const TextStyle(fontSize: 20)),
+        child: EmojiText(emojiCode, useRenderStyle: false, style: const TextStyle(fontSize: 20)),
       );
     }
 
@@ -1130,7 +1120,7 @@ class ChatChannelTile extends ConsumerWidget {
     final isFavorite = favorites.contains(channel.id);
 
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       horizontalTitleGap: 12,
       minVerticalPadding: 6,
       leading: _buildLeading(context, currentUser?.id),
@@ -1175,7 +1165,7 @@ class ChatChannelTile extends ConsumerWidget {
               TimeUtils.formatRelativeTime(channel.lastMessageSentAt),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: hasUnread
-                    ? theme.colorScheme.primary
+                    ? context.emphasis.selected
                     : theme.colorScheme.onSurfaceVariant,
                 fontSize: 11,
                 fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
