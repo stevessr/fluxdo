@@ -19,6 +19,8 @@ class _Avatars implements HttpClientAdapter {
   final started = <String, Completer<void>>{};
   final gates = <String, Completer<void>>{};
   int requests = 0;
+  final failuresRemaining = <String, int>{};
+  final requestsByUrl = <String, int>{};
 
   Future<void> waitFor(String url) =>
       started.putIfAbsent(url, Completer<void>.new).future;
@@ -30,9 +32,15 @@ class _Avatars implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests++;
+    requestsByUrl.update(options.path, (n) => n + 1, ifAbsent: () => 1);
     final start = started.putIfAbsent(options.path, Completer<void>.new);
     if (!start.isCompleted) start.complete();
     await gates[options.path]?.future;
+    final remaining = failuresRemaining[options.path] ?? 0;
+    if (remaining > 0) {
+      failuresRemaining[options.path] = remaining - 1;
+      return ResponseBody.fromBytes(Uint8List(0), 503);
+    }
     return ResponseBody.fromBytes(png, 200);
   }
 
@@ -149,6 +157,76 @@ void main() {
       },
     );
   }
+
+  testWidgets('可见自绘头像失败后无需滚动即可重试，且同 URL 去重', (tester) async {
+    const url = 'https://cdn.example.com/retry-visible.png';
+    await tester.runAsync(() async {
+      adapter.failuresRemaining[url] = 1;
+      final first = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+      final second = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+      try {
+        expect(TopicCardImages.lookup(url, first), isNull);
+        expect(TopicCardImages.lookup(url, second), isNull);
+        // Do not call lookup again until the retry starts on its own.
+        await waitUntil(() => adapter.requestsByUrl[url] == 2);
+        await waitUntil(() => TopicCardImages.lookup(url, first) != null);
+        expect(TopicCardImages.lookup(url, second), isNotNull);
+        expect(adapter.requestsByUrl[url], 2);
+      } finally {
+        TopicCardImages.releaseRequester(first);
+        TopicCardImages.releaseRequester(second);
+        first.dispose();
+        second.dispose();
+      }
+    });
+  });
+
+  testWidgets('可见自绘头像遇到坏缓存时重新下载并恢复', (tester) async {
+    const url = 'https://cdn.example.com/retry-corrupt.png';
+    await tester.runAsync(() async {
+      await BlobImageCache.write(bucket, url, Uint8List.fromList([1, 2, 3]));
+      final requester = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+      try {
+        expect(TopicCardImages.lookup(url, requester), isNull);
+        await waitUntil(() => adapter.requestsByUrl[url] == 1);
+        await waitUntil(() => TopicCardImages.lookup(url, requester) != null);
+        expect(await BlobImageCache.read(bucket, url), orderedEquals(png));
+        expect(adapter.requestsByUrl[url], 1);
+      } finally {
+        TopicCardImages.releaseRequester(requester);
+        requester.dispose();
+      }
+    });
+  });
+
+  testWidgets('持续失败的头像有冷却期，不会反复抢占下载队列', (tester) async {
+    const url = 'https://cdn.example.com/retry-exhausted.png';
+    await tester.runAsync(() async {
+      adapter.failuresRemaining[url] = 10;
+      final requester = RenderConstrainedBox(
+        additionalConstraints: const BoxConstraints(),
+      );
+      try {
+        expect(TopicCardImages.lookup(url, requester), isNull);
+        await waitUntil(() => TopicCardImages.isCoolingDown(url));
+        expect(adapter.requestsByUrl[url], 3);
+        for (var i = 0; i < 10; i++) {
+          expect(TopicCardImages.lookup(url, requester), isNull);
+          TopicCardImages.prewarm(url);
+        }
+        expect(adapter.requestsByUrl[url], 3);
+      } finally {
+        TopicCardImages.releaseRequester(requester);
+        requester.dispose();
+      }
+    });
+  });
 
   testWidgets('动图头像组件与自绘首帧共享头像下载和磁盘缓存', (tester) async {
     const url = 'https://cdn.example.com/shared-animated-avatar.gif';
