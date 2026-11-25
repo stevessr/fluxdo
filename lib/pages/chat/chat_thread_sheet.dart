@@ -23,6 +23,7 @@ import '../../utils/time_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../widgets/chat/chat_message_flag_sheet.dart';
 import '../../widgets/chat/chat_keyboard_viewport.dart';
+import '../../widgets/chat/chat_surface.dart';
 import '../../widgets/chat/online_status_avatar.dart';
 import '../../widgets/common/app_bottom_sheet.dart';
 import '../../widgets/common/cached_image.dart';
@@ -1542,25 +1543,10 @@ class _ThreadChatBubbleState extends State<_ThreadChatBubble> {
                             horizontal: 12,
                             vertical: 8,
                           ),
-                          decoration: BoxDecoration(
-                            color: isOwnMessage
-                                ? theme.colorScheme.primaryContainer
-                                : theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: context.shapes.borderRadius(16).copyWith(
-                              bottomLeft: isOwnMessage
-                                  ? context.shapes.radius(16)
-                                  : context.shapes.radius(4),
-                              bottomRight: isOwnMessage
-                                  ? context.shapes.radius(4)
-                                  : context.shapes.radius(16),
-                            ),
-                            border: isOriginal
-                                ? Border.all(
-                                    color: theme.colorScheme.primary.withValues(
-                                      alpha: 0.35,
-                                    ),
-                                  )
-                                : null,
+                          decoration: ChatSurface.bubble(
+                            context,
+                            isOwn: isOwnMessage,
+                            isOriginal: isOriginal,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
