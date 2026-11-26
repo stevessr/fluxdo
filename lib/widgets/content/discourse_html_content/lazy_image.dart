@@ -145,7 +145,10 @@ class _LazyImageState extends State<LazyImage> {
   void _armFallbackTimer() {
     _fallbackTimer?.cancel();
     if (!_visibleSource || _sourceHasFrame || _nextSourceIndex == null) return;
-    _fallbackTimer = Timer(const Duration(seconds: 15), _scheduleFallback);
+    _fallbackTimer = Timer(
+      const Duration(seconds: 15),
+      () => _scheduleFallback(stalled: true),
+    );
   }
 
   void _resetSourceWatchdog() {
@@ -177,7 +180,7 @@ class _LazyImageState extends State<LazyImage> {
     return null;
   }
 
-  void _scheduleFallback() {
+  void _scheduleFallback({bool stalled = false}) {
     final next = _nextSourceIndex;
     if (next == null || _fallbackScheduled) return;
     _fallbackScheduled = true;
@@ -185,6 +188,7 @@ class _LazyImageState extends State<LazyImage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || generation != _imageGeneration) return;
       _fallbackScheduled = false;
+      if (stalled && _sourceHasFrame) return;
       _resetSourceWatchdog();
       _releaseDownloadPriority?.call();
       _releaseDownloadPriority = null;

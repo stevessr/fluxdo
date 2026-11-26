@@ -30,7 +30,10 @@ class ImageDownloadTaskPools {
     12,
     groupLimits: smallGroupLimits,
   );
-  final DownloadRequestQueue _mainContent = DownloadRequestQueue(8, reservedHighSlots: 1);
+  final DownloadRequestQueue _mainContent = DownloadRequestQueue(
+    8,
+    reservedHighSlots: 1,
+  );
   final DownloadRequestQueue _mainSticker = DownloadRequestQueue(
     3,
     reservedHighSlots: 1,
@@ -39,7 +42,10 @@ class ImageDownloadTaskPools {
     12,
     groupLimits: smallGroupLimits,
   );
-  final DownloadRequestQueue _content = DownloadRequestQueue(6, reservedHighSlots: 1);
+  final DownloadRequestQueue _content = DownloadRequestQueue(
+    6,
+    reservedHighSlots: 1,
+  );
   final DownloadRequestQueue _sticker = DownloadRequestQueue(
     3,
     reservedHighSlots: 1,
