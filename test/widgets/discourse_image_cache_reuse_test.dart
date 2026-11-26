@@ -214,6 +214,64 @@ void main() {
     tester.binding.imageCache.evict(key);
   });
 
+  testWidgets('可见正文缩略图一直无首帧时自动显示原图', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const thumb = 'https://test.invalid/stalled-thumbnail.jpg';
+    const original = 'https://test.invalid/stalled-original.jpg';
+    Future<Object> keyFor(String url) async => ResizeImage(
+      discourseImageProvider(url),
+      width: 80,
+      height: 4096,
+      policy: ResizeImagePolicy.fit,
+    ).obtainKey(ImageConfiguration.empty);
+
+    final thumbKey = await keyFor(thumb);
+    final originalKey = await keyFor(original);
+    final stalled = Completer<ImageInfo>();
+    tester.binding.imageCache.putIfAbsent(
+      thumbKey,
+      () => OneFrameImageStreamCompleter(stalled.future),
+    );
+    final pixels = (await tester.runAsync(
+      () => createTestImage(width: 80, height: 60, cache: false),
+    ))!;
+    tester.binding.imageCache.putIfAbsent(
+      originalKey,
+      () => OneFrameImageStreamCompleter(
+        Future.value(ImageInfo(image: pixels)),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: LazyImage(
+            imageProvider: discourseImageProvider(thumb),
+            cacheKey: thumb,
+            originalImageProvider: discourseImageProvider(original),
+            originalCacheKey: original,
+            width: 80,
+            height: 60,
+            heroTag: 'stalled-thumbnail',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(await tester.widget<Image>(find.byType(Image)).image
+        .obtainKey(ImageConfiguration.empty), thumbKey);
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(await tester.widget<Image>(find.byType(Image)).image
+        .obtainKey(ImageConfiguration.empty), originalKey);
+    expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.binding.imageCache.evict(thumbKey);
+    tester.binding.imageCache.evict(originalKey);
+  });
+
   testWidgets('正文缩略图失败时直接显示 lightbox 原图，无需点击', (tester) async {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetDevicePixelRatio);

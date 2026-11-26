@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:common_ui/common_ui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:app_icons/app_icons.dart';
@@ -133,6 +135,26 @@ class _LazyImageState extends State<LazyImage> {
   int _sourceIndex = 0;
   bool _fallbackScheduled = false;
   int _imageGeneration = 0;
+  Timer? _fallbackTimer;
+  bool _visibleSource = false;
+  bool _sourceHasFrame = false;
+  int _lastReceivedBytes = 0;
+
+  // A visible stalled thumbnail should not keep the original URL waiting
+  // for the full network deadline. Active transfers renew this idle budget.
+  void _armFallbackTimer() {
+    _fallbackTimer?.cancel();
+    if (!_visibleSource || _sourceHasFrame || _nextSourceIndex == null) return;
+    _fallbackTimer = Timer(const Duration(seconds: 15), _scheduleFallback);
+  }
+
+  void _resetSourceWatchdog() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer = null;
+    _visibleSource = false;
+    _sourceHasFrame = false;
+    _lastReceivedBytes = 0;
+  }
 
   // 同一挂载图片使用稳定解码宽度；窗口/列宽变化仅更新布局。
   int? _decodePixelWidth;
@@ -163,6 +185,7 @@ class _LazyImageState extends State<LazyImage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || generation != _imageGeneration) return;
       _fallbackScheduled = false;
+      _resetSourceWatchdog();
       _releaseDownloadPriority?.call();
       _releaseDownloadPriority = null;
       _stopRatioResolve();
@@ -175,6 +198,7 @@ class _LazyImageState extends State<LazyImage> {
       });
       _resolveRatioIfNeeded();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// raster 大帧归因:本 State 是否已记过"缓存命中上屏"(挂载期一次,
@@ -206,6 +230,7 @@ class _LazyImageState extends State<LazyImage> {
         oldWidget.originalCacheKey != widget.originalCacheKey;
     if (changed) {
       _imageGeneration++;
+      _resetSourceWatchdog();
       _decodePixelWidth = null;
       _sourceIndex = 0;
       _syncPaintNoted = false;
@@ -225,6 +250,7 @@ class _LazyImageState extends State<LazyImage> {
 
   @override
   void dispose() {
+    _resetSourceWatchdog();
     _stopRatioResolve();
     _cancelGateWait();
     _scrollAwareContext.dispose();
@@ -379,6 +405,7 @@ class _LazyImageState extends State<LazyImage> {
 
     final provider = _buildProvider(context);
     final imageChild = Image(
+      key: ValueKey((_imageGeneration, _sourceIndex)),
       // 解码目标宽 = 显示逻辑宽 × dpr(见 _buildProvider);与比例监听
       // 使用同一 provider 参数,共享 ImageStream 与缓存条目
       image: provider,
@@ -389,6 +416,8 @@ class _LazyImageState extends State<LazyImage> {
       gaplessPlayback: true,
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (frame == null) return placeholderBox();
+        _sourceHasFrame = true;
+        _fallbackTimer?.cancel();
         // 首绘闸门:缓存同步命中(纹理早已上传)与已获准的直接显示;
         // 新解码完成的图申请本帧名额,拿不到先继续占位,获准回调里
         // setState 放行 —— 多图同帧集中上传由此摊成逐帧一张
@@ -415,7 +444,14 @@ class _LazyImageState extends State<LazyImage> {
         // 无进度事件(AVIF/native 动图全程、网络图首字节前)时,child 已由
         // frameBuilder 决定(占位或图),直接透传;有进度时显示进度值。
         if (loadingProgress == null) return child;
-        if (loadingProgress.expectedTotalBytes == null) return child;
+        if (loadingProgress.cumulativeBytesLoaded > _lastReceivedBytes) {
+          _lastReceivedBytes = loadingProgress.cumulativeBytesLoaded;
+          _armFallbackTimer();
+        }
+        if (loadingProgress.expectedTotalBytes == null ||
+            loadingProgress.expectedTotalBytes! <= 0 || _sourceHasFrame) {
+          return child;
+        }
         return placeholderBox(
           progress:
               loadingProgress.cumulativeBytesLoaded /
@@ -485,8 +521,10 @@ class _LazyImageState extends State<LazyImage> {
     final bumpUrl = _activeKey;
     if (bumpUrl != null && bumpUrl.startsWith('http')) {
       imageWidget = FirstPaintProbe(
-        key: ValueKey(bumpUrl),
+        key: ValueKey((_imageGeneration, _sourceIndex, bumpUrl)),
         onFirstPaint: () {
+          _visibleSource = true;
+          _armFallbackTimer();
           _releaseDownloadPriority ??= BlobImageCache.retainForeground(
             BlobImageCache.contentBucket,
             bumpUrl,

@@ -82,35 +82,12 @@ class DioHttpClient extends http.BaseClient {
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
   };
 
-  /// 图片下载同时按主站/CDN、内容通道和组内并发分流：外层池隔离不同
-  /// host/channel，内层队列限制小图/正文/贴纸总数并预留前台槽位。
+  /// 每个域名组与内容通道只经过一个并发队列，保留前台槽位。
   /// 主站图片继续走带 Cookie 的 Dio，第三方 CDN 不带 Cookie。
   static final ImageDownloadTaskPools _taskPools = ImageDownloadTaskPools(
     mainHost: Uri.parse(AppConstants.baseUrl).host,
   );
 
-  static final DownloadRequestQueue _smallSemaphore = DownloadRequestQueue(
-    12,
-    groupLimits: ImageDownloadTaskPools.smallGroupLimits,
-  );
-  static final DownloadRequestQueue _contentSemaphore = DownloadRequestQueue(
-    6,
-    reservedHighSlots: 1,
-  );
-  static final DownloadRequestQueue _stickerSemaphore = DownloadRequestQueue(
-    3,
-    reservedHighSlots: 1,
-  );
-
-  /// [send] 沿用内容通道。
-  static DownloadRequestQueue get _downloadSemaphore => _contentSemaphore;
-
-  static DownloadRequestQueue _semaphoreOf(DownloadChannel channel) =>
-      switch (channel) {
-        DownloadChannel.small => _smallSemaphore,
-        DownloadChannel.content => _contentSemaphore,
-        DownloadChannel.sticker => _stickerSemaphore,
-      };
   /// 把仍在 [channel] 等待队列中的 [url] 提到高优先级(滚入视野)。
   /// 在途/未排队/已完成均为无操作 —— 幂等,调用方无需判断状态。
   static void bumpPending(DownloadChannel channel, String url) =>
@@ -124,13 +101,7 @@ class DioHttpClient extends http.BaseClient {
     DownloadChannel channel,
     String url,
   ) {
-    final releaseInner = _semaphoreOf(channel).retainForeground(url);
-    final releaseOuter = _taskPools.queueFor(Uri.parse(url), channel)
-        .retainForeground(url);
-    return () {
-      releaseOuter();
-      releaseInner();
-    };
+    return _taskPools.queueFor(Uri.parse(url), channel).retainForeground(url);
   }
 
   /// 提取 [AppConstants.baseUrl] 的 host(例如 `linux.do`),用于判断主域。
@@ -245,8 +216,7 @@ class DioHttpClient extends http.BaseClient {
     String? smallGroup,
   }) async {
     final group = channel == DownloadChannel.small ? smallGroup : null;
-    final taskQueue = _taskPools.queueFor(url, channel);
-    await taskQueue.acquire(url.toString(), priority, group: group);
+    // Start the logical deadline before admission, including queue wait.
     try {
       return await DeadlineDio.withDeadline(
         dio.RequestOptions(path: url.toString(), cancelToken: cancellation),
@@ -264,8 +234,8 @@ class DioHttpClient extends http.BaseClient {
       );
     } on dio.DioException catch (error) {
       throw http.ClientException('Dio error: ${error.message}', url);
-    } finally {
-      taskQueue.release(group: group);
+    } on DownloadQueueCancelled {
+      throw http.ClientException('Image download cancelled while queued', url);
     }
   }
 
@@ -280,7 +250,7 @@ class DioHttpClient extends http.BaseClient {
     required String? group,
   }) async {
     final elapsed = Stopwatch()..start();
-    final semaphore = _semaphoreOf(channel);
+    final semaphore = _taskPools.queueFor(url, channel);
     final cancelToken = cancellation ?? dio.CancelToken();
     cancelToken.throwIfCancellationRequested();
     await semaphore.acquire(
