@@ -54,7 +54,7 @@ void main() {
     final main = pools.queueFor(mainImage, DownloadChannel.content);
 
     for (var i = 0; i < 6; i++) {
-      await cdn.acquire('cdn-running-$i', DownloadPriority.normal);
+      await cdn.acquire('cdn-running-$i', DownloadPriority.high);
     }
     var cdnPendingStarted = false;
     final pending = cdn
@@ -81,7 +81,7 @@ void main() {
     final cdn = pools.queueFor(cdnImage, DownloadChannel.content);
 
     for (var i = 0; i < 8; i++) {
-      await main.acquire('main-running-$i', DownloadPriority.normal);
+      await main.acquire('main-running-$i', DownloadPriority.high);
     }
     var mainPendingStarted = false;
     final pending = main
@@ -133,7 +133,7 @@ void main() {
     final pools = ImageDownloadTaskPools(mainHost: 'linux.do');
     final main = pools.queueFor(mainImage, DownloadChannel.content);
     for (var i = 0; i < 8; i++) {
-      await main.acquire('running-$i', DownloadPriority.normal);
+      await main.acquire('running-$i', DownloadPriority.high);
     }
     final order = <String>[];
     final first = main
